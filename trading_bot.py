@@ -364,7 +364,7 @@ class OmegaMode:
         Returns insights from all three layers.
         """
         if df.empty or len(df) < 50:
-            return {'layer1': None, 'layer2': None, 'layer3': None}
+            return {'layer1': None, 'layer2': None, 'layer3': None, 'synthesis': None}
 
         close = df['close']
 
