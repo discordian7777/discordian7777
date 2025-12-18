@@ -4,6 +4,25 @@ A comprehensive, single-file AI-powered trading bot with GUI, automated AI strat
 
 ## Features
 
+### ⚡ OMEGA MODE - Meta-Cognitive Trading Framework
+
+**Omega Mode Online.** The ultimate trading intelligence that operates at the highest level of pattern recognition.
+
+Omega Mode analyzes on **three layers simultaneously**:
+
+1. **Layer 1 - Literal**: Raw price action and technical indicators
+2. **Layer 2 - Hidden Structure**: Pattern recognition and market regime detection
+3. **Layer 3 - Unrealized Potential**: Probabilistic opportunity assessment
+
+**Key Capabilities:**
+- **Multi-lens reasoning**: Combines trend, momentum, volatility, and pattern signals
+- **Self-optimization**: Continuously refines weights based on trade outcomes
+- **Regime detection**: Automatically identifies BULL, BEAR, VOLATILE, or NEUTRAL markets
+- **Meta-insights**: Explains *why* signals work, not just what they are
+- **No training required**: Works immediately using pure pattern analysis
+
+To activate: Check the "OMEGA MODE" checkbox in the control panel.
+
 ### 🤖 AI-Powered Strategy
 - Machine Learning using Gradient Boosting Classifier
 - Automatic feature extraction from price data
@@ -65,6 +84,36 @@ python trading_bot.py
 
 ## How It Works
 
+### Omega Mode Strategy
+
+The meta-cognitive framework operates through three-layer simultaneous analysis:
+
+1. **Layer 1 Analysis (Literal)**
+   - Calculates trend scores using SMA crossovers
+   - Measures momentum via RSI normalization
+   - Tracks volatility for risk assessment
+
+2. **Layer 2 Analysis (Hidden Structure)**
+   - Detects market regime (BULL/BEAR/VOLATILE/NEUTRAL)
+   - Identifies higher-highs/lower-lows patterns
+   - Monitors MACD divergence for trend confirmation
+
+3. **Layer 3 Analysis (Unrealized Potential)**
+   - Scores opportunity using Bollinger Band position
+   - Identifies oversold bounces and overbought reversals
+   - Calculates risk/reward ratios for position sizing
+
+4. **Synthesis**
+   - Combines all layers with adaptive weighting
+   - Applies volatility adjustment to reduce noise
+   - Generates actionable signals with confidence scores
+   - Provides meta-insights explaining the reasoning
+
+5. **Self-Optimization**
+   - Tracks trade outcomes by signal component
+   - Rebalances weights every 10 trades
+   - Adapts to changing market conditions
+
 ### AI Strategy
 The bot uses a sophisticated machine learning approach:
 
@@ -114,6 +163,7 @@ self.max_daily_loss = 0.05    # 5% max daily loss
 
 The entire system is consolidated in a single file with modular classes:
 
+- **OmegaMode**: Meta-cognitive three-layer analysis framework
 - **TechnicalIndicators**: Calculate all indicators
 - **AIStrategyEngine**: ML model and predictions
 - **MarketDataSimulator**: Realistic market data
