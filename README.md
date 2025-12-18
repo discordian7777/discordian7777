@@ -137,6 +137,27 @@ The bot uses a sophisticated machine learning approach:
 - Includes volume data
 - Configurable volatility
 
+### CSV Data Management
+
+The bot automatically manages training data through CSV files:
+
+**Loading Data for Training:**
+- Place any CSV files with price data in the bot's directory
+- Supported column names: `close`, `price`, `open`, `high`, `low`, `volume`
+- Bot will automatically load and combine all CSV files on "Train AI"
+- Falls back to simulated data if no CSVs are found
+
+**Session Logging:**
+Each trading session automatically saves:
+- `price_data_YYYYMMDD_HHMMSS.csv` - All price ticks (used for future training)
+- `session_log_trades_YYYYMMDD_HHMMSS.csv` - All executed trades with P&L
+- `session_log_signals_YYYYMMDD_HHMMSS.csv` - All signals generated
+
+**Continuous Learning:**
+- Each session's price data is saved for future AI training
+- Run multiple sessions to build a larger training dataset
+- AI model improves as more historical data accumulates
+
 ## Statistics Tracked
 
 - **Balance**: Cash available for trading
@@ -164,6 +185,7 @@ self.max_daily_loss = 0.05    # 5% max daily loss
 The entire system is consolidated in a single file with modular classes:
 
 - **OmegaMode**: Meta-cognitive three-layer analysis framework
+- **DataManager**: CSV loading and session logging for continuous learning
 - **TechnicalIndicators**: Calculate all indicators
 - **AIStrategyEngine**: ML model and predictions
 - **MarketDataSimulator**: Realistic market data
