@@ -143,9 +143,14 @@ The bot automatically manages training data through CSV files:
 
 **Loading Data for Training:**
 - Place any CSV files with price data in the bot's directory
-- Supported column names: `close`, `price`, `open`, `high`, `low`, `volume`
 - Bot will automatically load and combine all CSV files on "Train AI"
 - Falls back to simulated data if no CSVs are found
+
+**Supported CSV Formats:**
+- **Standard OHLCV**: `open`, `high`, `low`, `close`, `volume`
+- **Binance Export**: `open_time`, `open`, `high`, `low`, `close`, `volume`, `close_time`, `quote_asset_volume`, `num_trades`, `taker_buy_base_vol`, `taker_buy_quote_vol`, `open_dt`, `close_dt`
+- **Yahoo Finance**: `Date`, `Open`, `High`, `Low`, `Close`, `Adj Close`, `Volume`
+- **Generic**: Any CSV with at least a `close` or `price` column
 
 **Session Logging:**
 Each trading session automatically saves:

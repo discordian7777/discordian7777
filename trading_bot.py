@@ -125,14 +125,20 @@ class DataManager:
                 df.columns = df.columns.str.lower().str.strip()
 
                 # Check for required columns (flexible naming)
+                # Supports: Standard OHLCV, Binance format, Yahoo Finance, etc.
                 required_cols = ['close']
                 alt_names = {
-                    'close': ['close', 'price', 'last', 'adj close', 'adj_close'],
-                    'open': ['open'],
-                    'high': ['high'],
-                    'low': ['low'],
-                    'volume': ['volume', 'vol']
+                    'close': ['close', 'price', 'last', 'adj close', 'adj_close', 'close_price'],
+                    'open': ['open', 'open_price'],
+                    'high': ['high', 'high_price'],
+                    'low': ['low', 'low_price'],
+                    'volume': ['volume', 'vol', 'quote_asset_volume', 'base_volume'],
+                    'timestamp': ['timestamp', 'open_time', 'close_time', 'open_dt', 'close_dt', 'date', 'time', 'datetime']
                 }
+
+                # Handle Binance-style data with num_trades, taker volumes, etc.
+                # These columns are preserved but not required
+                binance_extra_cols = ['num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'quote_asset_volume']
 
                 # Map columns to standard names
                 for std_name, alternatives in alt_names.items():
