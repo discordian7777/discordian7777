@@ -23,6 +23,31 @@ Omega Mode analyzes on **three layers simultaneously**:
 
 To activate: Check the "OMEGA MODE" checkbox in the control panel.
 
+### 🧠 AI COUNCIL - Multi-AI Ensemble Decision System
+
+**AI Council Online.** Leverages multiple frontier AI models to make consensus-based trading decisions.
+
+**Supported AI Providers:**
+- **DeepSeek** (deepseek-chat)
+- **OpenAI** (gpt-4o-mini)
+- **Claude** (claude-3-5-sonnet)
+
+**How It Works:**
+1. All configured AIs analyze the same market data in parallel
+2. Each AI provides: signal (BUY/SELL/HOLD), confidence, reasoning
+3. Council votes and calculates consensus (60% threshold)
+4. Final decision reflects collective AI intelligence
+
+**Setup:**
+```bash
+# Set API keys as environment variables
+export DEEPSEEK_API_KEY="your-key"
+export OPENAI_API_KEY="your-key"
+export ANTHROPIC_API_KEY="your-key"
+```
+
+To activate: Check the "AI COUNCIL" checkbox. Works with 1-3 providers.
+
 ### 🤖 AI-Powered Strategy
 - Machine Learning using Gradient Boosting Classifier
 - Automatic feature extraction from price data
@@ -190,6 +215,7 @@ self.max_daily_loss = 0.05    # 5% max daily loss
 The entire system is consolidated in a single file with modular classes:
 
 - **OmegaMode**: Meta-cognitive three-layer analysis framework
+- **AICouncil**: Multi-AI ensemble with DeepSeek, OpenAI, Claude
 - **DataManager**: CSV loading and session logging for continuous learning
 - **TechnicalIndicators**: Calculate all indicators
 - **AIStrategyEngine**: ML model and predictions
