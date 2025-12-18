@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional
 import queue
 import logging
+import os
+import glob as glob_module
 
 # Machine Learning imports
 try:
@@ -78,6 +80,182 @@ class Position:
 
     def update_pnl(self):
         self.unrealized_pnl = (self.current_price - self.entry_price) * self.quantity
+
+
+# ============================================================================
+# DATA MANAGER - CSV LOADING AND SESSION LOGGING
+# ============================================================================
+
+class DataManager:
+    """
+    Manages CSV data loading and session logging.
+
+    - Loads all CSV files from directory for AI training
+    - Saves session logs as CSV for future training
+    """
+
+    def __init__(self, data_dir: str = None):
+        self.data_dir = data_dir or os.path.dirname(os.path.abspath(__file__))
+        self.session_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.session_trades = []
+        self.session_signals = []
+        self.session_prices = []
+
+    def find_csv_files(self) -> List[str]:
+        """Find all CSV files in the data directory"""
+        pattern = os.path.join(self.data_dir, "*.csv")
+        csv_files = glob_module.glob(pattern)
+        # Exclude session logs from training data (they have different format)
+        training_files = [f for f in csv_files if not os.path.basename(f).startswith("session_log_")]
+        return training_files
+
+    def load_historical_data(self) -> pd.DataFrame:
+        """Load and combine all CSV files for training"""
+        csv_files = self.find_csv_files()
+
+        if not csv_files:
+            logging.info("No CSV files found for training data")
+            return pd.DataFrame()
+
+        all_data = []
+        for csv_file in csv_files:
+            try:
+                df = pd.read_csv(csv_file)
+                # Standardize column names
+                df.columns = df.columns.str.lower().str.strip()
+
+                # Check for required columns (flexible naming)
+                # Supports: Standard OHLCV, Binance format, Yahoo Finance, etc.
+                required_cols = ['close']
+                alt_names = {
+                    'close': ['close', 'price', 'last', 'adj close', 'adj_close', 'close_price'],
+                    'open': ['open', 'open_price'],
+                    'high': ['high', 'high_price'],
+                    'low': ['low', 'low_price'],
+                    'volume': ['volume', 'vol', 'quote_asset_volume', 'base_volume'],
+                    'timestamp': ['timestamp', 'open_time', 'close_time', 'open_dt', 'close_dt', 'date', 'time', 'datetime']
+                }
+
+                # Handle Binance-style data with num_trades, taker volumes, etc.
+                # These columns are preserved but not required
+                binance_extra_cols = ['num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'quote_asset_volume']
+
+                # Map columns to standard names
+                for std_name, alternatives in alt_names.items():
+                    for alt in alternatives:
+                        if alt in df.columns and std_name not in df.columns:
+                            df[std_name] = df[alt]
+                            break
+
+                if 'close' in df.columns:
+                    # Generate OHLC if only close is available
+                    if 'open' not in df.columns:
+                        df['open'] = df['close'].shift(1).fillna(df['close'])
+                    if 'high' not in df.columns:
+                        df['high'] = df['close'] * 1.001
+                    if 'low' not in df.columns:
+                        df['low'] = df['close'] * 0.999
+                    if 'volume' not in df.columns:
+                        df['volume'] = 1000
+
+                    all_data.append(df)
+                    logging.info(f"Loaded {len(df)} rows from {os.path.basename(csv_file)}")
+                else:
+                    logging.warning(f"Skipping {csv_file}: no 'close' column found")
+
+            except Exception as e:
+                logging.error(f"Error loading {csv_file}: {e}")
+
+        if not all_data:
+            return pd.DataFrame()
+
+        # Combine all dataframes
+        combined = pd.concat(all_data, ignore_index=True)
+        logging.info(f"Total historical data: {len(combined)} rows from {len(all_data)} files")
+        return combined
+
+    def log_trade(self, trade: Dict):
+        """Log a trade for session export"""
+        trade_record = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'symbol': trade.get('symbol', 'UNKNOWN'),
+            'side': trade.get('side', ''),
+            'price': trade.get('price', 0),
+            'quantity': trade.get('quantity', 0),
+            'profit': trade.get('profit', 0),
+            'strategy': trade.get('strategy', 'AI'),
+            'confidence': trade.get('confidence', 0),
+            'regime': trade.get('regime', 'N/A'),
+            'signal_reason': trade.get('reason', '')
+        }
+        self.session_trades.append(trade_record)
+
+    def log_signal(self, signal: Dict, price: float):
+        """Log a signal for session export"""
+        signal_record = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'price': price,
+            'signal': signal.get('signal', 'HOLD'),
+            'confidence': signal.get('confidence', 0),
+            'regime': signal.get('regime', 'N/A'),
+            'opportunity': signal.get('opportunity', 'NONE'),
+            'raw_signal': signal.get('raw_signal', 0),
+            'reason': signal.get('reason', '')
+        }
+        self.session_signals.append(signal_record)
+
+    def log_price(self, tick: Dict):
+        """Log price data for session export"""
+        price_record = {
+            'timestamp': tick.get('timestamp', datetime.datetime.now()).isoformat()
+                if isinstance(tick.get('timestamp'), datetime.datetime)
+                else str(tick.get('timestamp', '')),
+            'open': tick.get('open', 0),
+            'high': tick.get('high', 0),
+            'low': tick.get('low', 0),
+            'close': tick.get('close', 0),
+            'volume': tick.get('volume', 0)
+        }
+        self.session_prices.append(price_record)
+
+    def save_session_log(self) -> Dict[str, str]:
+        """Save session data to CSV files for future training"""
+        saved_files = {}
+
+        # Save trades log
+        if self.session_trades:
+            trades_file = os.path.join(self.data_dir, f"session_log_trades_{self.session_id}.csv")
+            trades_df = pd.DataFrame(self.session_trades)
+            trades_df.to_csv(trades_file, index=False)
+            saved_files['trades'] = trades_file
+            logging.info(f"Saved {len(self.session_trades)} trades to {trades_file}")
+
+        # Save price data (for future AI training)
+        if self.session_prices:
+            prices_file = os.path.join(self.data_dir, f"price_data_{self.session_id}.csv")
+            prices_df = pd.DataFrame(self.session_prices)
+            prices_df.to_csv(prices_file, index=False)
+            saved_files['prices'] = prices_file
+            logging.info(f"Saved {len(self.session_prices)} price records to {prices_file}")
+
+        # Save signals log
+        if self.session_signals:
+            signals_file = os.path.join(self.data_dir, f"session_log_signals_{self.session_id}.csv")
+            signals_df = pd.DataFrame(self.session_signals)
+            signals_df.to_csv(signals_file, index=False)
+            saved_files['signals'] = signals_file
+            logging.info(f"Saved {len(self.session_signals)} signals to {signals_file}")
+
+        return saved_files
+
+    def get_session_summary(self) -> Dict:
+        """Get summary of current session"""
+        return {
+            'session_id': self.session_id,
+            'total_trades': len(self.session_trades),
+            'total_signals': len(self.session_signals),
+            'total_price_points': len(self.session_prices)
+        }
 
 
 # ============================================================================
@@ -186,7 +364,7 @@ class OmegaMode:
         Returns insights from all three layers.
         """
         if df.empty or len(df) < 50:
-            return {'layer1': None, 'layer2': None, 'layer3': None}
+            return {'layer1': None, 'layer2': None, 'layer3': None, 'synthesis': None}
 
         close = df['close']
 
@@ -700,6 +878,9 @@ class TradingEngine:
         self.use_omega_mode = False
         self.market_simulator = MarketDataSimulator()
 
+        # Data management - CSV loading and session logging
+        self.data_manager = DataManager()
+
         # Statistics
         self.total_trades = 0
         self.winning_trades = 0
@@ -1089,20 +1270,34 @@ class TradingBotGUI:
             self.regime_label.config(text="Regime: --", foreground="gray")
 
     def train_ai(self):
-        """Train AI model"""
+        """Train AI model using CSV data + simulated data"""
         self.log_message("Training AI model...")
         self.train_button.config(state='disabled')
 
         def train_thread():
-            # Generate historical data
-            historical_df = self.engine.market_simulator.get_historical_data(periods=500)
+            # Try to load historical data from CSV files first
+            csv_data = self.engine.data_manager.load_historical_data()
+
+            if not csv_data.empty:
+                self.update_queue.put(('log', f'Loaded {len(csv_data)} rows from CSV files'))
+                historical_df = csv_data
+            else:
+                self.update_queue.put(('log', 'No CSV data found, using simulated data...'))
+                # Generate simulated historical data as fallback
+                historical_df = self.engine.market_simulator.get_historical_data(periods=500)
+
+            # If we have both CSV and want more data, combine them
+            if not csv_data.empty and len(csv_data) < 500:
+                sim_data = self.engine.market_simulator.get_historical_data(periods=500 - len(csv_data))
+                historical_df = pd.concat([csv_data, sim_data], ignore_index=True)
+                self.update_queue.put(('log', f'Combined data: {len(historical_df)} total rows'))
 
             # Train model
             success = self.engine.ai_engine.train(historical_df)
 
             if success:
                 self.update_queue.put(('ai_trained', True))
-                self.update_queue.put(('log', 'AI model trained successfully!'))
+                self.update_queue.put(('log', f'AI model trained successfully on {len(historical_df)} data points!'))
             else:
                 self.update_queue.put(('ai_trained', False))
                 self.update_queue.put(('log', 'Failed to train AI model.'))
@@ -1129,7 +1324,7 @@ class TradingBotGUI:
         thread.start()
 
     def stop_trading(self):
-        """Stop trading bot"""
+        """Stop trading bot and save session log"""
         self.is_running = False
         self.start_button.config(state='normal')
         self.stop_button.config(state='disabled')
@@ -1137,13 +1332,30 @@ class TradingBotGUI:
 
         self.log_message("Trading bot stopped!")
 
+        # Save session log to CSV for future training
+        self.log_message("Saving session data to CSV...")
+        saved_files = self.engine.data_manager.save_session_log()
+
+        if saved_files:
+            summary = self.engine.data_manager.get_session_summary()
+            self.log_message(f"Session {summary['session_id']} saved:")
+            self.log_message(f"  - {summary['total_trades']} trades")
+            self.log_message(f"  - {summary['total_price_points']} price points")
+            for file_type, path in saved_files.items():
+                self.log_message(f"  - {file_type}: {os.path.basename(path)}")
+        else:
+            self.log_message("No data to save for this session.")
+
     def trading_loop(self):
-        """Main trading loop"""
+        """Main trading loop with session logging"""
         while self.is_running:
             try:
                 # Generate new market tick
                 tick = self.engine.market_simulator.generate_tick()
                 current_price = tick['close']
+
+                # Log price data for future training
+                self.engine.data_manager.log_price(tick)
 
                 # Update positions
                 if self.symbol in self.engine.positions:
@@ -1158,6 +1370,9 @@ class TradingBotGUI:
                 confidence = prediction.get('confidence', 0.0)
                 reason = prediction.get('reason', '')
 
+                # Log signal for session export
+                self.engine.data_manager.log_signal(prediction, current_price)
+
                 # Trading logic
                 mode_tag = "[OMEGA]" if self.engine.use_omega_mode else "[AI]"
 
@@ -1169,6 +1384,18 @@ class TradingBotGUI:
                             msg += f"\n  -> {reason}"
                         self.update_queue.put(('log', msg))
 
+                        # Log trade for session export
+                        self.engine.data_manager.log_trade({
+                            'symbol': self.symbol,
+                            'side': 'BUY',
+                            'price': current_price,
+                            'quantity': quantity,
+                            'strategy': 'OMEGA' if self.engine.use_omega_mode else 'AI',
+                            'confidence': confidence,
+                            'regime': prediction.get('regime', 'N/A'),
+                            'reason': reason
+                        })
+
                         # Self-optimization feedback for Omega Mode
                         if self.engine.use_omega_mode:
                             self.engine.omega_mode.self_optimize({
@@ -1178,11 +1405,29 @@ class TradingBotGUI:
                             })
 
                 elif signal == 'SELL' and self.symbol in self.engine.positions:
+                    position = self.engine.positions.get(self.symbol)
+                    profit = 0
+                    if position:
+                        profit = (current_price - position.entry_price) * abs(position.quantity)
+
                     if self.engine.close_position(self.symbol, current_price):
                         msg = f"{mode_tag} SELL {self.symbol} @ ${current_price:.2f} (Conf: {confidence:.2f})"
                         if reason and self.engine.use_omega_mode:
                             msg += f"\n  -> {reason}"
                         self.update_queue.put(('log', msg))
+
+                        # Log trade for session export
+                        self.engine.data_manager.log_trade({
+                            'symbol': self.symbol,
+                            'side': 'SELL',
+                            'price': current_price,
+                            'quantity': abs(position.quantity) if position else 0,
+                            'profit': profit,
+                            'strategy': 'OMEGA' if self.engine.use_omega_mode else 'AI',
+                            'confidence': confidence,
+                            'regime': prediction.get('regime', 'N/A'),
+                            'reason': reason
+                        })
 
                 # Update equity curve
                 self.engine.equity_curve.append({
