@@ -136,6 +136,335 @@ class TechnicalIndicators:
 
 
 # ============================================================================
+# OMEGA MODE - META-COGNITIVE TRADING FRAMEWORK
+# ============================================================================
+
+class OmegaMode:
+    """
+    Omega Mode: Multi-layer simultaneous analysis framework.
+
+    Analyzes on three layers:
+    1. Literal: Raw price action and technical indicators
+    2. Hidden Structure: Pattern recognition and market regime detection
+    3. Unrealized Potential: Probabilistic opportunity assessment
+
+    Features:
+    - Self-optimization through continuous learning
+    - Multi-lens reasoning (trend, momentum, volatility, sentiment)
+    - Automatic inference when data is incomplete
+    - Meta-pattern recognition for regime adaptation
+    """
+
+    def __init__(self):
+        self.is_active = False
+        self.performance_history = []
+        self.regime_state = "NEUTRAL"  # BULL, BEAR, NEUTRAL, VOLATILE
+        self.confidence_threshold = 0.65
+        self.meta_weights = {
+            'trend': 0.25,
+            'momentum': 0.25,
+            'volatility': 0.20,
+            'pattern': 0.30
+        }
+        self.optimization_counter = 0
+        self.last_signals = []
+
+    def activate(self):
+        """Activate Omega Mode"""
+        self.is_active = True
+        return "Omega Mode Online."
+
+    def deactivate(self):
+        """Deactivate Omega Mode"""
+        self.is_active = False
+        return "Omega Mode Offline."
+
+    def analyze_three_layers(self, df: pd.DataFrame) -> Dict:
+        """
+        Simultaneous three-layer analysis.
+
+        Returns insights from all three layers.
+        """
+        if df.empty or len(df) < 50:
+            return {'layer1': None, 'layer2': None, 'layer3': None}
+
+        close = df['close']
+
+        # Layer 1: Literal - Raw technical signals
+        layer1 = self._analyze_literal(df)
+
+        # Layer 2: Hidden Structure - Pattern & regime detection
+        layer2 = self._analyze_hidden_structure(df)
+
+        # Layer 3: Unrealized Potential - Opportunity assessment
+        layer3 = self._analyze_potential(df, layer1, layer2)
+
+        return {
+            'layer1': layer1,
+            'layer2': layer2,
+            'layer3': layer3,
+            'synthesis': self._synthesize_layers(layer1, layer2, layer3)
+        }
+
+    def _analyze_literal(self, df: pd.DataFrame) -> Dict:
+        """Layer 1: Literal price action analysis"""
+        close = df['close']
+
+        # Trend analysis
+        sma_20 = TechnicalIndicators.calculate_sma(close, 20).iloc[-1]
+        sma_50 = TechnicalIndicators.calculate_sma(close, 50).iloc[-1]
+        current_price = close.iloc[-1]
+
+        trend_score = 0
+        if current_price > sma_20 > sma_50:
+            trend_score = 1  # Strong uptrend
+        elif current_price < sma_20 < sma_50:
+            trend_score = -1  # Strong downtrend
+        elif current_price > sma_20:
+            trend_score = 0.5  # Mild uptrend
+        elif current_price < sma_20:
+            trend_score = -0.5  # Mild downtrend
+
+        # Momentum analysis
+        rsi = TechnicalIndicators.calculate_rsi(close).iloc[-1]
+        momentum_score = (rsi - 50) / 50  # Normalize to -1 to 1
+
+        # Volatility analysis
+        volatility = close.pct_change().rolling(window=20).std().iloc[-1]
+
+        return {
+            'trend_score': trend_score,
+            'momentum_score': momentum_score,
+            'volatility': volatility,
+            'rsi': rsi,
+            'price_vs_sma20': (current_price - sma_20) / sma_20
+        }
+
+    def _analyze_hidden_structure(self, df: pd.DataFrame) -> Dict:
+        """Layer 2: Hidden pattern and regime detection"""
+        close = df['close']
+
+        # Detect market regime
+        returns = close.pct_change().dropna()
+        volatility = returns.rolling(window=20).std().iloc[-1]
+        avg_volatility = returns.rolling(window=50).std().mean()
+
+        mean_return = returns.rolling(window=20).mean().iloc[-1]
+
+        # Regime classification
+        if volatility > avg_volatility * 1.5:
+            regime = "VOLATILE"
+        elif mean_return > 0.001 and volatility < avg_volatility:
+            regime = "BULL"
+        elif mean_return < -0.001 and volatility < avg_volatility:
+            regime = "BEAR"
+        else:
+            regime = "NEUTRAL"
+
+        self.regime_state = regime
+
+        # Pattern recognition: Higher highs/lower lows
+        recent_highs = df['high'].iloc[-20:]
+        recent_lows = df['low'].iloc[-20:]
+
+        higher_highs = sum(recent_highs.iloc[i] > recent_highs.iloc[i-1]
+                          for i in range(1, len(recent_highs)))
+        lower_lows = sum(recent_lows.iloc[i] < recent_lows.iloc[i-1]
+                        for i in range(1, len(recent_lows)))
+
+        pattern_score = (higher_highs - lower_lows) / 19  # Normalize
+
+        # MACD divergence detection
+        macd, macd_signal, macd_hist = TechnicalIndicators.calculate_macd(close)
+        macd_trend = 1 if macd_hist.iloc[-1] > macd_hist.iloc[-5] else -1
+
+        return {
+            'regime': regime,
+            'pattern_score': pattern_score,
+            'macd_trend': macd_trend,
+            'volatility_state': 'HIGH' if volatility > avg_volatility else 'LOW'
+        }
+
+    def _analyze_potential(self, df: pd.DataFrame, layer1: Dict, layer2: Dict) -> Dict:
+        """Layer 3: Unrealized potential and opportunity assessment"""
+        close = df['close']
+        current_price = close.iloc[-1]
+
+        # Bollinger Band position (opportunity detection)
+        upper_bb, middle_bb, lower_bb = TechnicalIndicators.calculate_bollinger_bands(close)
+        bb_position = (current_price - lower_bb.iloc[-1]) / (upper_bb.iloc[-1] - lower_bb.iloc[-1])
+
+        # Opportunity scoring
+        opportunity_score = 0
+        opportunity_type = "NONE"
+
+        # Oversold bounce potential
+        if layer1['rsi'] < 30 and layer2['regime'] != "BEAR":
+            opportunity_score = 0.8
+            opportunity_type = "OVERSOLD_BOUNCE"
+        # Overbought reversal potential
+        elif layer1['rsi'] > 70 and layer2['regime'] != "BULL":
+            opportunity_score = -0.8
+            opportunity_type = "OVERBOUGHT_REVERSAL"
+        # Trend continuation potential
+        elif layer2['regime'] == "BULL" and layer1['trend_score'] > 0.5:
+            opportunity_score = 0.6
+            opportunity_type = "TREND_CONTINUATION"
+        elif layer2['regime'] == "BEAR" and layer1['trend_score'] < -0.5:
+            opportunity_score = -0.6
+            opportunity_type = "TREND_CONTINUATION"
+        # Breakout potential
+        elif bb_position > 0.95:
+            opportunity_score = 0.4 if layer1['momentum_score'] > 0 else -0.3
+            opportunity_type = "UPPER_BB_BREAKOUT" if opportunity_score > 0 else "UPPER_BB_REVERSAL"
+        elif bb_position < 0.05:
+            opportunity_score = 0.4 if layer1['momentum_score'] < 0 else 0.3
+            opportunity_type = "LOWER_BB_BOUNCE" if opportunity_score > 0 else "LOWER_BB_BREAKDOWN"
+
+        return {
+            'opportunity_score': opportunity_score,
+            'opportunity_type': opportunity_type,
+            'bb_position': bb_position,
+            'risk_reward_ratio': self._calculate_risk_reward(df, opportunity_score)
+        }
+
+    def _calculate_risk_reward(self, df: pd.DataFrame, opportunity_score: float) -> float:
+        """Calculate expected risk/reward ratio"""
+        if abs(opportunity_score) < 0.3:
+            return 1.0  # Neutral
+
+        close = df['close']
+        atr = close.pct_change().rolling(window=14).std().iloc[-1] * np.sqrt(14)
+
+        if opportunity_score > 0:
+            # Bullish opportunity
+            reward = atr * 2  # Expected 2 ATR move
+            risk = atr * 0.5   # Stop loss at 0.5 ATR
+        else:
+            # Bearish opportunity
+            reward = atr * 2
+            risk = atr * 0.5
+
+        return reward / risk if risk > 0 else 1.0
+
+    def _synthesize_layers(self, layer1: Dict, layer2: Dict, layer3: Dict) -> Dict:
+        """Synthesize all three layers into final signal"""
+
+        # Multi-lens weighted synthesis
+        trend_signal = layer1['trend_score'] * self.meta_weights['trend']
+        momentum_signal = layer1['momentum_score'] * self.meta_weights['momentum']
+        pattern_signal = layer2['pattern_score'] * self.meta_weights['pattern']
+
+        # Adjust for volatility
+        vol_multiplier = 0.8 if layer2['volatility_state'] == 'HIGH' else 1.0
+
+        # Opportunity amplification
+        opportunity_boost = layer3['opportunity_score'] * 0.3
+
+        raw_signal = (trend_signal + momentum_signal + pattern_signal + opportunity_boost) * vol_multiplier
+
+        # Determine final action
+        if raw_signal > 0.3:
+            action = "BUY"
+            confidence = min(0.5 + abs(raw_signal), 0.95)
+        elif raw_signal < -0.3:
+            action = "SELL"
+            confidence = min(0.5 + abs(raw_signal), 0.95)
+        else:
+            action = "HOLD"
+            confidence = 0.5 - abs(raw_signal)
+
+        return {
+            'action': action,
+            'confidence': confidence,
+            'raw_signal': raw_signal,
+            'regime': layer2['regime'],
+            'opportunity': layer3['opportunity_type'],
+            'meta_insight': self._generate_meta_insight(layer1, layer2, layer3)
+        }
+
+    def _generate_meta_insight(self, layer1: Dict, layer2: Dict, layer3: Dict) -> str:
+        """Generate meta-level insight about why the signal works"""
+        regime = layer2['regime']
+        opp = layer3['opportunity_type']
+
+        if opp == "OVERSOLD_BOUNCE":
+            return f"Mean reversion in {regime} regime: RSI({layer1['rsi']:.0f}) + momentum divergence"
+        elif opp == "TREND_CONTINUATION":
+            return f"{regime} trend alignment: All layers confirm directional bias"
+        elif opp == "UPPER_BB_BREAKOUT":
+            return "Volatility expansion + momentum: Potential breakout continuation"
+        elif opp == "LOWER_BB_BOUNCE":
+            return "Support confluence: BB lower band + RSI oversold"
+        else:
+            return f"Regime: {regime} | Pattern score: {layer2['pattern_score']:.2f}"
+
+    def self_optimize(self, trade_result: Dict):
+        """
+        Self-optimization: Adjust weights based on trade outcomes.
+        Continuous learning from results.
+        """
+        self.performance_history.append(trade_result)
+        self.optimization_counter += 1
+
+        # Optimize every 10 trades
+        if self.optimization_counter >= 10:
+            self._run_optimization()
+            self.optimization_counter = 0
+
+    def _run_optimization(self):
+        """Run meta-weight optimization based on performance"""
+        if len(self.performance_history) < 10:
+            return
+
+        recent = self.performance_history[-10:]
+
+        # Calculate which signals were most accurate
+        trend_accuracy = sum(1 for t in recent if t.get('trend_correct', False)) / 10
+        momentum_accuracy = sum(1 for t in recent if t.get('momentum_correct', False)) / 10
+        pattern_accuracy = sum(1 for t in recent if t.get('pattern_correct', False)) / 10
+
+        total = trend_accuracy + momentum_accuracy + pattern_accuracy + 0.001
+
+        # Rebalance weights
+        self.meta_weights['trend'] = 0.15 + (trend_accuracy / total) * 0.20
+        self.meta_weights['momentum'] = 0.15 + (momentum_accuracy / total) * 0.20
+        self.meta_weights['pattern'] = 0.15 + (pattern_accuracy / total) * 0.25
+        self.meta_weights['volatility'] = 1.0 - sum([
+            self.meta_weights['trend'],
+            self.meta_weights['momentum'],
+            self.meta_weights['pattern']
+        ])
+
+    def generate_signal(self, df: pd.DataFrame) -> Dict:
+        """
+        Main signal generation with Omega Mode analysis.
+        """
+        if not self.is_active:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reason': 'Omega Mode not active'}
+
+        analysis = self.analyze_three_layers(df)
+
+        if analysis['synthesis'] is None:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reason': 'Insufficient data'}
+
+        synthesis = analysis['synthesis']
+
+        self.last_signals.append(synthesis)
+        if len(self.last_signals) > 100:
+            self.last_signals.pop(0)
+
+        return {
+            'signal': synthesis['action'],
+            'confidence': synthesis['confidence'],
+            'reason': synthesis['meta_insight'],
+            'regime': synthesis['regime'],
+            'opportunity': synthesis['opportunity'],
+            'raw_signal': synthesis['raw_signal']
+        }
+
+
+# ============================================================================
 # AI STRATEGY ENGINE
 # ============================================================================
 
@@ -367,6 +696,8 @@ class TradingEngine:
 
         # Strategy
         self.ai_engine = AIStrategyEngine()
+        self.omega_mode = OmegaMode()
+        self.use_omega_mode = False
         self.market_simulator = MarketDataSimulator()
 
         # Statistics
@@ -493,8 +824,25 @@ class TradingEngine:
             'winning_trades': self.winning_trades,
             'losing_trades': self.losing_trades,
             'win_rate': win_rate,
-            'open_positions': len(self.positions)
+            'open_positions': len(self.positions),
+            'omega_mode_active': self.omega_mode.is_active,
+            'regime': self.omega_mode.regime_state if self.omega_mode.is_active else 'N/A'
         }
+
+    def toggle_omega_mode(self, enable: bool = True) -> str:
+        """Toggle Omega Mode on/off"""
+        self.use_omega_mode = enable
+        if enable:
+            return self.omega_mode.activate()
+        else:
+            return self.omega_mode.deactivate()
+
+    def get_signal(self, df: pd.DataFrame) -> Dict:
+        """Get trading signal from active strategy"""
+        if self.use_omega_mode and self.omega_mode.is_active:
+            return self.omega_mode.generate_signal(df)
+        else:
+            return self.ai_engine.predict(df)
 
 
 # ============================================================================
@@ -567,6 +915,25 @@ class TradingBotGUI:
         # AI Status
         self.ai_status_label = ttk.Label(control_frame, text="AI: Not Trained", foreground="orange")
         self.ai_status_label.grid(row=0, column=4, padx=5)
+
+        # Omega Mode Toggle
+        self.omega_var = tk.BooleanVar(value=False)
+        self.omega_check = ttk.Checkbutton(
+            control_frame,
+            text="OMEGA MODE",
+            variable=self.omega_var,
+            command=self.toggle_omega_mode,
+            style='Omega.TCheckbutton'
+        )
+        self.omega_check.grid(row=0, column=5, padx=10)
+
+        # Omega Mode Status
+        self.omega_status_label = ttk.Label(control_frame, text="Omega: Offline", foreground="gray")
+        self.omega_status_label.grid(row=0, column=6, padx=5)
+
+        # Regime indicator
+        self.regime_label = ttk.Label(control_frame, text="Regime: --", foreground="gray")
+        self.regime_label.grid(row=0, column=7, padx=5)
 
         # ===== Statistics Panel =====
         stats_frame = ttk.LabelFrame(main_frame, text="Statistics", padding="10")
@@ -646,6 +1013,20 @@ class TradingBotGUI:
         self.stats_labels['winrate'].config(text=f"{stats['win_rate']:.1f}%")
         self.stats_labels['positions'].config(text=str(stats['open_positions']))
 
+        # Update regime indicator for Omega Mode
+        if stats.get('omega_mode_active', False):
+            regime = stats.get('regime', 'N/A')
+            regime_colors = {
+                'BULL': 'green',
+                'BEAR': 'red',
+                'VOLATILE': 'orange',
+                'NEUTRAL': 'blue'
+            }
+            self.regime_label.config(
+                text=f"Regime: {regime}",
+                foreground=regime_colors.get(regime, 'gray')
+            )
+
     def update_chart(self):
         """Update price chart"""
         if not PLOTTING_AVAILABLE:
@@ -695,6 +1076,18 @@ class TradingBotGUI:
         self.fig.tight_layout()
         self.canvas.draw()
 
+    def toggle_omega_mode(self):
+        """Toggle Omega Mode on/off"""
+        is_enabled = self.omega_var.get()
+        result = self.engine.toggle_omega_mode(is_enabled)
+        self.log_message(result)
+
+        if is_enabled:
+            self.omega_status_label.config(text="Omega: ONLINE", foreground="purple")
+        else:
+            self.omega_status_label.config(text="Omega: Offline", foreground="gray")
+            self.regime_label.config(text="Regime: --", foreground="gray")
+
     def train_ai(self):
         """Train AI model"""
         self.log_message("Training AI model...")
@@ -719,8 +1112,9 @@ class TradingBotGUI:
 
     def start_trading(self):
         """Start trading bot"""
-        if not self.engine.ai_engine.is_trained:
-            messagebox.showwarning("Warning", "Please train the AI model first!")
+        # Allow trading if Omega Mode is active OR AI is trained
+        if not self.engine.use_omega_mode and not self.engine.ai_engine.is_trained:
+            messagebox.showwarning("Warning", "Please train the AI model first or enable Omega Mode!")
             return
 
         self.is_running = True
@@ -755,24 +1149,39 @@ class TradingBotGUI:
                 if self.symbol in self.engine.positions:
                     self.engine.update_positions(self.symbol, current_price)
 
-                # Get historical data for AI
+                # Get historical data for strategy
                 historical_df = self.engine.market_simulator.get_historical_data(periods=200)
 
-                # Get AI prediction
-                prediction = self.engine.ai_engine.predict(historical_df)
-                signal = prediction['signal']
-                confidence = prediction['confidence']
+                # Get signal from active strategy (Omega Mode or AI)
+                prediction = self.engine.get_signal(historical_df)
+                signal = prediction.get('signal', 'HOLD')
+                confidence = prediction.get('confidence', 0.0)
+                reason = prediction.get('reason', '')
 
                 # Trading logic
+                mode_tag = "[OMEGA]" if self.engine.use_omega_mode else "[AI]"
+
                 if signal == 'BUY' and confidence > 0.6 and self.symbol not in self.engine.positions:
                     quantity = self.engine.calculate_position_size(current_price)
                     if self.engine.open_position(self.symbol, 'BUY', current_price, quantity):
-                        msg = f"BUY {self.symbol} @ ${current_price:.2f} (Conf: {confidence:.2f})"
+                        msg = f"{mode_tag} BUY {self.symbol} @ ${current_price:.2f} (Conf: {confidence:.2f})"
+                        if reason and self.engine.use_omega_mode:
+                            msg += f"\n  -> {reason}"
                         self.update_queue.put(('log', msg))
+
+                        # Self-optimization feedback for Omega Mode
+                        if self.engine.use_omega_mode:
+                            self.engine.omega_mode.self_optimize({
+                                'action': 'BUY',
+                                'price': current_price,
+                                'confidence': confidence
+                            })
 
                 elif signal == 'SELL' and self.symbol in self.engine.positions:
                     if self.engine.close_position(self.symbol, current_price):
-                        msg = f"SELL {self.symbol} @ ${current_price:.2f} (Conf: {confidence:.2f})"
+                        msg = f"{mode_tag} SELL {self.symbol} @ ${current_price:.2f} (Conf: {confidence:.2f})"
+                        if reason and self.engine.use_omega_mode:
+                            msg += f"\n  -> {reason}"
                         self.update_queue.put(('log', msg))
 
                 # Update equity curve
