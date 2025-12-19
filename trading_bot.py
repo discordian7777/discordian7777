@@ -676,7 +676,7 @@ class DeepSeekProvider(AIProvider):
 
     def get_trade_decision(self, market_context: str) -> Dict:
         if not self.api_key:
-            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured'}
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured', 'failed': True}
 
         try:
             headers = {
@@ -711,7 +711,7 @@ Respond in JSON format only:
 
         except Exception as e:
             logging.error(f"DeepSeek API error: {e}")
-            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name()}
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name(), 'failed': True}
 
 
 class OpenAIProvider(AIProvider):
@@ -727,7 +727,7 @@ class OpenAIProvider(AIProvider):
 
     def get_trade_decision(self, market_context: str) -> Dict:
         if not self.api_key:
-            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured'}
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured', 'failed': True}
 
         try:
             headers = {
@@ -761,7 +761,7 @@ Respond in JSON format only:
 
         except Exception as e:
             logging.error(f"OpenAI API error: {e}")
-            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name()}
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name(), 'failed': True}
 
 
 class ClaudeProvider(AIProvider):
@@ -770,14 +770,14 @@ class ClaudeProvider(AIProvider):
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.environ.get('ANTHROPIC_API_KEY', '')
         self.base_url = "https://api.anthropic.com/v1/messages"
-        self.model = "claude-3-5-sonnet-20241022"
+        self.model = "claude-3-haiku-20240307"
 
     def get_name(self) -> str:
         return "Claude"
 
     def get_trade_decision(self, market_context: str) -> Dict:
         if not self.api_key:
-            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured'}
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured', 'failed': True}
 
         try:
             headers = {
@@ -811,7 +811,7 @@ Respond in JSON format only:
 
         except Exception as e:
             logging.error(f"Claude API error: {e}")
-            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name()}
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name(), 'failed': True}
 
 
 class AICouncil:
@@ -962,12 +962,18 @@ OMEGA MODE ANALYSIS:
         if not decisions:
             return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No decisions to analyze'}
 
-        # Count votes
+        # Filter out failed API responses - don't count errors as votes
+        valid_decisions = [d for d in decisions if not d.get('failed', False)]
+
+        if not valid_decisions:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'All AI providers failed'}
+
+        # Count votes only from successful responses
         votes = {'BUY': 0, 'SELL': 0, 'HOLD': 0}
         confidences = {'BUY': [], 'SELL': [], 'HOLD': []}
         reasonings = []
 
-        for decision in decisions:
+        for decision in valid_decisions:
             signal = decision.get('signal', 'HOLD').upper()
             confidence = float(decision.get('confidence', 0.5))
             provider = decision.get('provider', 'Unknown')
