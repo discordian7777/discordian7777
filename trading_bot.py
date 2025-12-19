@@ -1222,11 +1222,11 @@ class MarketDataSimulator:
 
 
 class LiveMarketData:
-    """Fetches live BTC price data from Binance API"""
+    """Fetches live BTC price data from Binance US API"""
 
-    def __init__(self, symbol: str = "BTCUSDT"):
+    def __init__(self, symbol: str = "BTCUSD"):
         self.symbol = symbol
-        self.base_url = "https://api.binance.com/api/v3"
+        self.base_url = "https://api.binance.us/api/v3"
         self.history = []
         self.last_price = None
 
@@ -1352,7 +1352,7 @@ class TradingEngine:
         self.use_omega_mode = False
         self.use_ai_council = False
         self.market_simulator = MarketDataSimulator()
-        self.live_market_data = LiveMarketData(symbol="BTCUSDT")
+        self.live_market_data = LiveMarketData(symbol="BTCUSD")
         self.use_live_data = False  # Toggle for live BTC prices
 
         # Data management - CSV loading and session logging
@@ -1891,7 +1891,7 @@ class TradingBotGUI:
 
         if self.engine.use_live_data:
             self.live_status_label.config(text="Mode: LIVE BTC", foreground="green")
-            self.symbol = "BTCUSDT"  # Update symbol to match
+            self.symbol = "BTCUSD"  # Binance US uses USD pairs
         else:
             self.live_status_label.config(text="Mode: Simulated", foreground="gray")
             if "FAILED" in result:
