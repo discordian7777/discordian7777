@@ -18,6 +18,9 @@ import queue
 import logging
 import os
 import glob as glob_module
+import requests
+from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Machine Learning imports
 try:
@@ -120,7 +123,7 @@ class DataManager:
         all_data = []
         for csv_file in csv_files:
             try:
-                df = pd.read_csv(csv_file)
+                df = pd.read_csv(csv_file, low_memory=False)
                 # Standardize column names
                 df.columns = df.columns.str.lower().str.strip()
 
@@ -643,6 +646,367 @@ class OmegaMode:
 
 
 # ============================================================================
+# AI COUNCIL - MULTI-AI ENSEMBLE DECISION SYSTEM
+# ============================================================================
+
+class AIProvider(ABC):
+    """Abstract base class for AI providers"""
+
+    @abstractmethod
+    def get_trade_decision(self, market_context: str) -> Dict:
+        """Get trade decision from AI provider"""
+        pass
+
+    @abstractmethod
+    def get_name(self) -> str:
+        """Get provider name"""
+        pass
+
+
+class DeepSeekProvider(AIProvider):
+    """DeepSeek AI integration for trade decisions"""
+
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or os.environ.get('DEEPSEEK_API_KEY', '')
+        self.base_url = "https://api.deepseek.com/v1/chat/completions"
+        self.model = "deepseek-chat"
+
+    def get_name(self) -> str:
+        return "DeepSeek"
+
+    def get_trade_decision(self, market_context: str) -> Dict:
+        if not self.api_key:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured'}
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            prompt = f"""You are an expert trading AI. Analyze this market data and provide a trading decision.
+
+{market_context}
+
+Respond in JSON format only:
+{{"signal": "BUY" or "SELL" or "HOLD", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
+
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 200
+            }
+
+            response = requests.post(self.base_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
+            content = result['choices'][0]['message']['content']
+
+            # Parse JSON response
+            decision = json.loads(content.strip().replace('```json', '').replace('```', ''))
+            decision['provider'] = self.get_name()
+            return decision
+
+        except Exception as e:
+            logging.error(f"DeepSeek API error: {e}")
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name()}
+
+
+class OpenAIProvider(AIProvider):
+    """OpenAI GPT integration for trade decisions"""
+
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or os.environ.get('OPENAI_API_KEY', '')
+        self.base_url = "https://api.openai.com/v1/chat/completions"
+        self.model = "gpt-4o-mini"
+
+    def get_name(self) -> str:
+        return "OpenAI"
+
+    def get_trade_decision(self, market_context: str) -> Dict:
+        if not self.api_key:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured'}
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            prompt = f"""You are an expert trading AI. Analyze this market data and provide a trading decision.
+
+{market_context}
+
+Respond in JSON format only:
+{{"signal": "BUY" or "SELL" or "HOLD", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
+
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 200
+            }
+
+            response = requests.post(self.base_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
+            content = result['choices'][0]['message']['content']
+
+            decision = json.loads(content.strip().replace('```json', '').replace('```', ''))
+            decision['provider'] = self.get_name()
+            return decision
+
+        except Exception as e:
+            logging.error(f"OpenAI API error: {e}")
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name()}
+
+
+class ClaudeProvider(AIProvider):
+    """Anthropic Claude integration for trade decisions"""
+
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or os.environ.get('ANTHROPIC_API_KEY', '')
+        self.base_url = "https://api.anthropic.com/v1/messages"
+        self.model = "claude-3-5-sonnet-20241022"
+
+    def get_name(self) -> str:
+        return "Claude"
+
+    def get_trade_decision(self, market_context: str) -> Dict:
+        if not self.api_key:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No API key configured'}
+
+        try:
+            headers = {
+                "x-api-key": self.api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+
+            prompt = f"""You are an expert trading AI. Analyze this market data and provide a trading decision.
+
+{market_context}
+
+Respond in JSON format only:
+{{"signal": "BUY" or "SELL" or "HOLD", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
+
+            payload = {
+                "model": self.model,
+                "max_tokens": 200,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+
+            response = requests.post(self.base_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
+            content = result['content'][0]['text']
+
+            decision = json.loads(content.strip().replace('```json', '').replace('```', ''))
+            decision['provider'] = self.get_name()
+            return decision
+
+        except Exception as e:
+            logging.error(f"Claude API error: {e}")
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': f'API error: {str(e)}', 'provider': self.get_name()}
+
+
+class AICouncil:
+    """
+    Multi-AI Ensemble Decision System.
+
+    Leverages DeepSeek, OpenAI, and Claude to make consensus-based trading decisions.
+    Each AI analyzes the market independently, then votes on the final decision.
+    """
+
+    def __init__(self):
+        self.providers = []
+        self.is_active = False
+        self.decision_history = []
+        self.consensus_threshold = 0.6  # 60% agreement needed
+
+        # Initialize providers
+        self._init_providers()
+
+    def _init_providers(self):
+        """Initialize AI providers"""
+        self.providers = [
+            DeepSeekProvider(),
+            OpenAIProvider(),
+            ClaudeProvider()
+        ]
+
+    def configure_api_keys(self, deepseek_key: str = None, openai_key: str = None, claude_key: str = None):
+        """Configure API keys for providers"""
+        for provider in self.providers:
+            if isinstance(provider, DeepSeekProvider) and deepseek_key:
+                provider.api_key = deepseek_key
+            elif isinstance(provider, OpenAIProvider) and openai_key:
+                provider.api_key = openai_key
+            elif isinstance(provider, ClaudeProvider) and claude_key:
+                provider.api_key = claude_key
+
+    def activate(self) -> str:
+        """Activate AI Council"""
+        active_providers = [p.get_name() for p in self.providers if self._has_api_key(p)]
+        if not active_providers:
+            return "AI Council: No API keys configured. Set environment variables or configure keys."
+        self.is_active = True
+        return f"AI Council Online. Active providers: {', '.join(active_providers)}"
+
+    def deactivate(self) -> str:
+        """Deactivate AI Council"""
+        self.is_active = False
+        return "AI Council Offline."
+
+    def _has_api_key(self, provider: AIProvider) -> bool:
+        """Check if provider has API key configured"""
+        if isinstance(provider, DeepSeekProvider):
+            return bool(provider.api_key)
+        elif isinstance(provider, OpenAIProvider):
+            return bool(provider.api_key)
+        elif isinstance(provider, ClaudeProvider):
+            return bool(provider.api_key)
+        return False
+
+    def _build_market_context(self, df: pd.DataFrame, omega_analysis: Dict = None) -> str:
+        """Build market context string for AI analysis"""
+        if df.empty or len(df) < 20:
+            return "Insufficient data"
+
+        close = df['close']
+        current_price = close.iloc[-1]
+        price_change_1h = ((current_price - close.iloc[-60]) / close.iloc[-60] * 100) if len(close) >= 60 else 0
+        price_change_24h = ((current_price - close.iloc[-1440]) / close.iloc[-1440] * 100) if len(close) >= 1440 else price_change_1h
+
+        # Calculate indicators
+        sma_20 = close.rolling(20).mean().iloc[-1]
+        sma_50 = close.rolling(50).mean().iloc[-1] if len(close) >= 50 else sma_20
+        rsi = TechnicalIndicators.calculate_rsi(close).iloc[-1]
+        volatility = close.pct_change().rolling(20).std().iloc[-1] * 100
+
+        context = f"""MARKET DATA:
+- Current Price: ${current_price:.2f}
+- Price Change (1h): {price_change_1h:.2f}%
+- SMA 20: ${sma_20:.2f}
+- SMA 50: ${sma_50:.2f}
+- RSI (14): {rsi:.1f}
+- Volatility: {volatility:.2f}%
+- Price vs SMA20: {'ABOVE' if current_price > sma_20 else 'BELOW'}
+- Trend: {'BULLISH' if sma_20 > sma_50 else 'BEARISH' if sma_20 < sma_50 else 'NEUTRAL'}"""
+
+        if omega_analysis and omega_analysis.get('synthesis'):
+            synthesis = omega_analysis['synthesis']
+            context += f"""
+
+OMEGA MODE ANALYSIS:
+- Regime: {synthesis.get('regime', 'N/A')}
+- Opportunity: {synthesis.get('opportunity', 'NONE')}
+- Raw Signal: {synthesis.get('raw_signal', 0):.3f}
+- Meta-Insight: {synthesis.get('meta_insight', 'N/A')}"""
+
+        return context
+
+    def get_consensus_decision(self, df: pd.DataFrame, omega_analysis: Dict = None) -> Dict:
+        """
+        Get consensus decision from all AI providers.
+
+        Queries all configured AIs in parallel, then synthesizes their responses
+        into a final consensus decision.
+        """
+        if not self.is_active:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'AI Council not active'}
+
+        market_context = self._build_market_context(df, omega_analysis)
+
+        if market_context == "Insufficient data":
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'Insufficient market data'}
+
+        # Query all providers in parallel
+        decisions = []
+        active_providers = [p for p in self.providers if self._has_api_key(p)]
+
+        if not active_providers:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No AI providers configured'}
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(p.get_trade_decision, market_context): p for p in active_providers}
+
+            for future in as_completed(futures, timeout=60):
+                try:
+                    decision = future.result()
+                    decisions.append(decision)
+                except Exception as e:
+                    logging.error(f"Provider error: {e}")
+
+        if not decisions:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No responses from AI providers'}
+
+        # Calculate consensus
+        consensus = self._calculate_consensus(decisions)
+
+        # Log decision
+        self.decision_history.append({
+            'timestamp': datetime.datetime.now().isoformat(),
+            'individual_decisions': decisions,
+            'consensus': consensus
+        })
+
+        return consensus
+
+    def _calculate_consensus(self, decisions: List[Dict]) -> Dict:
+        """Calculate consensus from individual AI decisions"""
+        if not decisions:
+            return {'signal': 'HOLD', 'confidence': 0.0, 'reasoning': 'No decisions to analyze'}
+
+        # Count votes
+        votes = {'BUY': 0, 'SELL': 0, 'HOLD': 0}
+        confidences = {'BUY': [], 'SELL': [], 'HOLD': []}
+        reasonings = []
+
+        for decision in decisions:
+            signal = decision.get('signal', 'HOLD').upper()
+            confidence = float(decision.get('confidence', 0.5))
+            provider = decision.get('provider', 'Unknown')
+            reasoning = decision.get('reasoning', '')
+
+            if signal in votes:
+                votes[signal] += 1
+                confidences[signal].append(confidence)
+                reasonings.append(f"[{provider}] {signal}: {reasoning}")
+
+        # Determine winner
+        total_votes = sum(votes.values())
+        winner = max(votes, key=votes.get)
+        vote_pct = votes[winner] / total_votes if total_votes > 0 else 0
+
+        # Calculate average confidence for winning signal
+        avg_confidence = np.mean(confidences[winner]) if confidences[winner] else 0.5
+
+        # Adjust confidence based on consensus strength
+        consensus_confidence = avg_confidence * vote_pct
+
+        # Build reasoning summary
+        reasoning_summary = f"Council Vote: {votes['BUY']}B/{votes['SELL']}S/{votes['HOLD']}H | " + " | ".join(reasonings[:3])
+
+        return {
+            'signal': winner if vote_pct >= self.consensus_threshold else 'HOLD',
+            'confidence': consensus_confidence,
+            'reasoning': reasoning_summary,
+            'votes': votes,
+            'individual_decisions': decisions,
+            'consensus_strength': vote_pct
+        }
+
+    def get_active_providers(self) -> List[str]:
+        """Get list of active provider names"""
+        return [p.get_name() for p in self.providers if self._has_api_key(p)]
+
+
+# ============================================================================
 # AI STRATEGY ENGINE
 # ============================================================================
 
@@ -702,7 +1066,7 @@ class AIStrategyEngine:
         features['price_to_sma50'] = df['close'] / features['sma_50'] - 1
 
         # Drop NaN values
-        features = features.fillna(method='bfill').fillna(0)
+        features = features.bfill().fillna(0)
 
         return features
 
@@ -875,7 +1239,9 @@ class TradingEngine:
         # Strategy
         self.ai_engine = AIStrategyEngine()
         self.omega_mode = OmegaMode()
+        self.ai_council = AICouncil()
         self.use_omega_mode = False
+        self.use_ai_council = False
         self.market_simulator = MarketDataSimulator()
 
         # Data management - CSV loading and session logging
@@ -1018,9 +1384,34 @@ class TradingEngine:
         else:
             return self.omega_mode.deactivate()
 
+    def toggle_ai_council(self, enable: bool = True) -> str:
+        """Toggle AI Council on/off"""
+        self.use_ai_council = enable
+        if enable:
+            return self.ai_council.activate()
+        else:
+            return self.ai_council.deactivate()
+
+    def configure_ai_council(self, deepseek_key: str = None, openai_key: str = None, claude_key: str = None):
+        """Configure AI Council API keys"""
+        self.ai_council.configure_api_keys(deepseek_key, openai_key, claude_key)
+
     def get_signal(self, df: pd.DataFrame) -> Dict:
         """Get trading signal from active strategy"""
-        if self.use_omega_mode and self.omega_mode.is_active:
+        # Priority: AI Council > Omega Mode > ML Strategy
+        if self.use_ai_council and self.ai_council.is_active:
+            # Get Omega analysis to feed to AI Council
+            omega_analysis = self.omega_mode.analyze_three_layers(df) if self.use_omega_mode else None
+            council_decision = self.ai_council.get_consensus_decision(df, omega_analysis)
+            return {
+                'signal': council_decision.get('signal', 'HOLD'),
+                'confidence': council_decision.get('confidence', 0.0),
+                'reason': council_decision.get('reasoning', ''),
+                'regime': omega_analysis.get('synthesis', {}).get('regime', 'N/A') if omega_analysis and omega_analysis.get('synthesis') else 'N/A',
+                'votes': council_decision.get('votes', {}),
+                'council_active': True
+            }
+        elif self.use_omega_mode and self.omega_mode.is_active:
             return self.omega_mode.generate_signal(df)
         else:
             return self.ai_engine.predict(df)
@@ -1115,6 +1506,24 @@ class TradingBotGUI:
         # Regime indicator
         self.regime_label = ttk.Label(control_frame, text="Regime: --", foreground="gray")
         self.regime_label.grid(row=0, column=7, padx=5)
+
+        # AI Council Toggle (row 1)
+        self.council_var = tk.BooleanVar(value=False)
+        self.council_check = ttk.Checkbutton(
+            control_frame,
+            text="AI COUNCIL",
+            variable=self.council_var,
+            command=self.toggle_ai_council
+        )
+        self.council_check.grid(row=1, column=0, padx=5, pady=5, columnspan=2)
+
+        # AI Council Status
+        self.council_status_label = ttk.Label(control_frame, text="Council: Offline", foreground="gray")
+        self.council_status_label.grid(row=1, column=2, padx=5, columnspan=2)
+
+        # Active Providers Label
+        self.providers_label = ttk.Label(control_frame, text="Providers: None", foreground="gray")
+        self.providers_label.grid(row=1, column=4, padx=5, columnspan=4)
 
         # ===== Statistics Panel =====
         stats_frame = ttk.LabelFrame(main_frame, text="Statistics", padding="10")
@@ -1269,6 +1678,23 @@ class TradingBotGUI:
             self.omega_status_label.config(text="Omega: Offline", foreground="gray")
             self.regime_label.config(text="Regime: --", foreground="gray")
 
+    def toggle_ai_council(self):
+        """Toggle AI Council on/off"""
+        is_enabled = self.council_var.get()
+        result = self.engine.toggle_ai_council(is_enabled)
+        self.log_message(result)
+
+        if is_enabled:
+            self.council_status_label.config(text="Council: ONLINE", foreground="blue")
+            providers = self.engine.ai_council.get_active_providers()
+            if providers:
+                self.providers_label.config(text=f"Providers: {', '.join(providers)}", foreground="green")
+            else:
+                self.providers_label.config(text="Providers: None (set API keys)", foreground="orange")
+        else:
+            self.council_status_label.config(text="Council: Offline", foreground="gray")
+            self.providers_label.config(text="Providers: None", foreground="gray")
+
     def train_ai(self):
         """Train AI model using CSV data + simulated data"""
         self.log_message("Training AI model...")
@@ -1307,9 +1733,9 @@ class TradingBotGUI:
 
     def start_trading(self):
         """Start trading bot"""
-        # Allow trading if Omega Mode is active OR AI is trained
-        if not self.engine.use_omega_mode and not self.engine.ai_engine.is_trained:
-            messagebox.showwarning("Warning", "Please train the AI model first or enable Omega Mode!")
+        # Allow trading if AI Council, Omega Mode is active, OR AI is trained
+        if not self.engine.use_ai_council and not self.engine.use_omega_mode and not self.engine.ai_engine.is_trained:
+            messagebox.showwarning("Warning", "Please train the AI model first, enable Omega Mode, or enable AI Council!")
             return
 
         self.is_running = True
@@ -1374,23 +1800,33 @@ class TradingBotGUI:
                 self.engine.data_manager.log_signal(prediction, current_price)
 
                 # Trading logic
-                mode_tag = "[OMEGA]" if self.engine.use_omega_mode else "[AI]"
+                if self.engine.use_ai_council:
+                    mode_tag = "[COUNCIL]"
+                elif self.engine.use_omega_mode:
+                    mode_tag = "[OMEGA]"
+                else:
+                    mode_tag = "[AI]"
 
                 if signal == 'BUY' and confidence > 0.6 and self.symbol not in self.engine.positions:
                     quantity = self.engine.calculate_position_size(current_price)
                     if self.engine.open_position(self.symbol, 'BUY', current_price, quantity):
                         msg = f"{mode_tag} BUY {self.symbol} @ ${current_price:.2f} (Conf: {confidence:.2f})"
-                        if reason and self.engine.use_omega_mode:
+                        # Show votes for AI Council
+                        if self.engine.use_ai_council and prediction.get('votes'):
+                            votes = prediction['votes']
+                            msg += f" [Votes: {votes.get('BUY', 0)}B/{votes.get('SELL', 0)}S/{votes.get('HOLD', 0)}H]"
+                        if reason and (self.engine.use_omega_mode or self.engine.use_ai_council):
                             msg += f"\n  -> {reason}"
                         self.update_queue.put(('log', msg))
 
                         # Log trade for session export
+                        strategy = 'COUNCIL' if self.engine.use_ai_council else ('OMEGA' if self.engine.use_omega_mode else 'AI')
                         self.engine.data_manager.log_trade({
                             'symbol': self.symbol,
                             'side': 'BUY',
                             'price': current_price,
                             'quantity': quantity,
-                            'strategy': 'OMEGA' if self.engine.use_omega_mode else 'AI',
+                            'strategy': strategy,
                             'confidence': confidence,
                             'regime': prediction.get('regime', 'N/A'),
                             'reason': reason
@@ -1412,18 +1848,23 @@ class TradingBotGUI:
 
                     if self.engine.close_position(self.symbol, current_price):
                         msg = f"{mode_tag} SELL {self.symbol} @ ${current_price:.2f} (Conf: {confidence:.2f})"
-                        if reason and self.engine.use_omega_mode:
+                        # Show votes for AI Council
+                        if self.engine.use_ai_council and prediction.get('votes'):
+                            votes = prediction['votes']
+                            msg += f" [Votes: {votes.get('BUY', 0)}B/{votes.get('SELL', 0)}S/{votes.get('HOLD', 0)}H]"
+                        if reason and (self.engine.use_omega_mode or self.engine.use_ai_council):
                             msg += f"\n  -> {reason}"
                         self.update_queue.put(('log', msg))
 
                         # Log trade for session export
+                        strategy = 'COUNCIL' if self.engine.use_ai_council else ('OMEGA' if self.engine.use_omega_mode else 'AI')
                         self.engine.data_manager.log_trade({
                             'symbol': self.symbol,
                             'side': 'SELL',
                             'price': current_price,
                             'quantity': abs(position.quantity) if position else 0,
                             'profit': profit,
-                            'strategy': 'OMEGA' if self.engine.use_omega_mode else 'AI',
+                            'strategy': strategy,
                             'confidence': confidence,
                             'regime': prediction.get('regime', 'N/A'),
                             'reason': reason
