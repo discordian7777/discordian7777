@@ -1761,7 +1761,7 @@ class TradingBotGUI:
             )
 
     def update_chart(self):
-        """Update price chart"""
+        """Update price chart with live BTC data"""
         if not PLOTTING_AVAILABLE:
             return
 
@@ -1773,38 +1773,83 @@ class TradingBotGUI:
         self.ax1.clear()
         self.ax2.clear()
 
-        # Price chart
-        self.ax1.plot(df.index, df['close'], label='Price', color='blue', linewidth=1.5)
+        # Use timestamp for X-axis if available, otherwise use index
+        if 'timestamp' in df.columns:
+            x_data = df['timestamp']
+            # Format x-axis for timestamps
+            self.ax1.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+            self.ax2.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+        else:
+            x_data = df.index
+
+        # Price chart - candlestick style for live data
+        if self.engine.use_live_data and all(col in df.columns for col in ['open', 'high', 'low', 'close']):
+            # Plot as line with high/low range
+            self.ax1.fill_between(x_data, df['low'], df['high'], alpha=0.2, color='blue', label='H/L Range')
+            self.ax1.plot(x_data, df['close'], label='Close', color='blue', linewidth=1.5)
+            self.ax1.plot(x_data, df['open'], label='Open', color='gray', linewidth=0.8, linestyle='--', alpha=0.7)
+        else:
+            self.ax1.plot(x_data, df['close'], label='Price', color='blue', linewidth=1.5)
 
         # Add moving averages
         if len(df) >= 20:
             sma20 = TechnicalIndicators.calculate_sma(df['close'], 20)
-            self.ax1.plot(df.index, sma20, label='SMA 20', color='orange', linewidth=1, alpha=0.7)
+            self.ax1.plot(x_data, sma20, label='SMA 20', color='orange', linewidth=1, alpha=0.7)
 
         if len(df) >= 50:
             sma50 = TechnicalIndicators.calculate_sma(df['close'], 50)
-            self.ax1.plot(df.index, sma50, label='SMA 50', color='red', linewidth=1, alpha=0.7)
+            self.ax1.plot(x_data, sma50, label='SMA 50', color='red', linewidth=1, alpha=0.7)
 
         # Mark trades
         for trade in self.engine.trades[-20:]:  # Last 20 trades
             try:
                 idx = df[df['timestamp'] >= trade.timestamp].index[0]
+                trade_x = x_data.iloc[idx] if 'timestamp' in df.columns else idx
                 color = 'green' if trade.side == 'BUY' else 'red'
                 marker = '^' if trade.side == 'BUY' else 'v'
-                self.ax1.scatter(idx, trade.price, color=color, marker=marker, s=100, zorder=5)
+                self.ax1.scatter(trade_x, trade.price, color=color, marker=marker, s=100, zorder=5)
             except (IndexError, KeyError):
                 pass
 
-        self.ax1.set_ylabel('Price')
+        # Current price annotation for live mode
+        if self.engine.use_live_data and len(df) > 0:
+            current_price = df['close'].iloc[-1]
+            self.ax1.axhline(y=current_price, color='green', linestyle='-', linewidth=0.8, alpha=0.5)
+            self.ax1.annotate(f'${current_price:,.2f}', xy=(x_data.iloc[-1], current_price),
+                            xytext=(5, 0), textcoords='offset points', fontsize=9,
+                            color='green', fontweight='bold')
+
+        self.ax1.set_ylabel('Price (USD)')
         self.ax1.legend(loc='upper left', fontsize=8)
         self.ax1.grid(True, alpha=0.3)
-        self.ax1.set_title(f'{self.symbol} - AI Trading Bot', fontsize=10)
 
-        # Volume chart
+        # Title with live indicator
+        mode_str = "LIVE" if self.engine.use_live_data else "SIM"
+        current_price_str = f" | ${df['close'].iloc[-1]:,.2f}" if len(df) > 0 else ""
+        self.ax1.set_title(f'{self.symbol} [{mode_str}]{current_price_str}', fontsize=10, fontweight='bold')
+
+        # Format Y-axis for large BTC prices
+        self.ax1.yaxis.set_major_formatter(plt.matplotlib.ticker.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+
+        # Volume chart with colors based on price movement
         if 'volume' in df.columns:
-            self.ax2.bar(df.index, df['volume'], color='gray', alpha=0.5)
+            colors = []
+            for i in range(len(df)):
+                if i == 0:
+                    colors.append('gray')
+                elif df['close'].iloc[i] >= df['close'].iloc[i-1]:
+                    colors.append('green')
+                else:
+                    colors.append('red')
+
+            self.ax2.bar(x_data, df['volume'], color=colors, alpha=0.6)
             self.ax2.set_ylabel('Volume')
+            self.ax2.set_xlabel('Time')
             self.ax2.grid(True, alpha=0.3)
+
+            # Format volume for readability
+            self.ax2.yaxis.set_major_formatter(plt.matplotlib.ticker.FuncFormatter(
+                lambda x, p: f'{x/1000:.0f}K' if x < 1000000 else f'{x/1000000:.1f}M'))
 
         self.fig.tight_layout()
         self.canvas.draw()
