@@ -1221,6 +1221,109 @@ class MarketDataSimulator:
         return pd.DataFrame(self.history[-periods:])
 
 
+class LiveMarketData:
+    """Fetches live BTC price data from Binance API"""
+
+    def __init__(self, symbol: str = "BTCUSDT"):
+        self.symbol = symbol
+        self.base_url = "https://api.binance.com/api/v3"
+        self.history = []
+        self.last_price = None
+
+    def fetch_current_price(self) -> Dict:
+        """Fetch current BTC price from Binance"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/ticker/24hr",
+                params={"symbol": self.symbol},
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            tick = {
+                'timestamp': datetime.datetime.now(),
+                'open': float(data['openPrice']),
+                'high': float(data['highPrice']),
+                'low': float(data['lowPrice']),
+                'close': float(data['lastPrice']),
+                'volume': float(data['volume'])
+            }
+
+            self.last_price = tick['close']
+            self.history.append(tick)
+
+            # Keep last 1000 ticks
+            if len(self.history) > 1000:
+                self.history.pop(0)
+
+            return tick
+
+        except Exception as e:
+            logging.error(f"Error fetching live price: {e}")
+            # Return last known price or default
+            if self.last_price:
+                return {
+                    'timestamp': datetime.datetime.now(),
+                    'open': self.last_price,
+                    'high': self.last_price,
+                    'low': self.last_price,
+                    'close': self.last_price,
+                    'volume': 0
+                }
+            return None
+
+    def fetch_klines(self, interval: str = "1m", limit: int = 200) -> pd.DataFrame:
+        """Fetch historical klines/candlestick data from Binance"""
+        try:
+            response = requests.get(
+                f"{self.base_url}/klines",
+                params={
+                    "symbol": self.symbol,
+                    "interval": interval,
+                    "limit": limit
+                },
+                timeout=10
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Binance kline format: [open_time, open, high, low, close, volume, close_time, ...]
+            df = pd.DataFrame(data, columns=[
+                'open_time', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+                'taker_buy_quote', 'ignore'
+            ])
+
+            # Convert to proper types
+            df['timestamp'] = pd.to_datetime(df['open_time'], unit='ms')
+            df['open'] = df['open'].astype(float)
+            df['high'] = df['high'].astype(float)
+            df['low'] = df['low'].astype(float)
+            df['close'] = df['close'].astype(float)
+            df['volume'] = df['volume'].astype(float)
+
+            # Update history with latest
+            self.last_price = df['close'].iloc[-1]
+
+            return df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+
+        except Exception as e:
+            logging.error(f"Error fetching klines: {e}")
+            return pd.DataFrame()
+
+    def generate_tick(self) -> Dict:
+        """Generate tick from live data (compatible with simulator interface)"""
+        return self.fetch_current_price()
+
+    def get_historical_data(self, periods: int = 200) -> pd.DataFrame:
+        """Get historical data (compatible with simulator interface)"""
+        df = self.fetch_klines(interval="1m", limit=periods)
+        if df.empty and self.history:
+            return pd.DataFrame(self.history[-periods:])
+        return df
+
+
 # ============================================================================
 # TRADING ENGINE
 # ============================================================================
@@ -1249,6 +1352,8 @@ class TradingEngine:
         self.use_omega_mode = False
         self.use_ai_council = False
         self.market_simulator = MarketDataSimulator()
+        self.live_market_data = LiveMarketData(symbol="BTCUSDT")
+        self.use_live_data = False  # Toggle for live BTC prices
 
         # Data management - CSV loading and session logging
         self.data_manager = DataManager()
@@ -1402,6 +1507,24 @@ class TradingEngine:
         """Configure AI Council API keys"""
         self.ai_council.configure_api_keys(deepseek_key, openai_key, claude_key)
 
+    def toggle_live_data(self, enable: bool = True) -> str:
+        """Toggle between live BTC prices and simulated data"""
+        self.use_live_data = enable
+        if enable:
+            # Test connection to Binance
+            tick = self.live_market_data.fetch_current_price()
+            if tick:
+                return f"Live Mode ON: BTC @ ${tick['close']:,.2f}"
+            else:
+                self.use_live_data = False
+                return "Live Mode FAILED: Could not connect to Binance API"
+        else:
+            return "Live Mode OFF: Using simulated data"
+
+    def get_market_data_source(self):
+        """Get the active market data source"""
+        return self.live_market_data if self.use_live_data else self.market_simulator
+
     def get_signal(self, df: pd.DataFrame) -> Dict:
         """Get trading signal from active strategy"""
         # Priority: AI Council > Omega Mode > ML Strategy
@@ -1529,7 +1652,21 @@ class TradingBotGUI:
 
         # Active Providers Label
         self.providers_label = ttk.Label(control_frame, text="Providers: None", foreground="gray")
-        self.providers_label.grid(row=1, column=4, padx=5, columnspan=4)
+        self.providers_label.grid(row=1, column=4, padx=5, columnspan=2)
+
+        # Live BTC Mode Toggle
+        self.live_var = tk.BooleanVar(value=False)
+        self.live_check = ttk.Checkbutton(
+            control_frame,
+            text="LIVE BTC",
+            variable=self.live_var,
+            command=self.toggle_live_mode
+        )
+        self.live_check.grid(row=1, column=6, padx=5)
+
+        # Live Mode Status
+        self.live_status_label = ttk.Label(control_frame, text="Mode: Simulated", foreground="gray")
+        self.live_status_label.grid(row=1, column=7, padx=5)
 
         # ===== Statistics Panel =====
         stats_frame = ttk.LabelFrame(main_frame, text="Statistics", padding="10")
@@ -1628,7 +1765,7 @@ class TradingBotGUI:
         if not PLOTTING_AVAILABLE:
             return
 
-        df = self.engine.market_simulator.get_historical_data(periods=100)
+        df = self.engine.get_market_data_source().get_historical_data(periods=100)
 
         if df.empty:
             return
@@ -1700,6 +1837,20 @@ class TradingBotGUI:
         else:
             self.council_status_label.config(text="Council: Offline", foreground="gray")
             self.providers_label.config(text="Providers: None", foreground="gray")
+
+    def toggle_live_mode(self):
+        """Toggle between live BTC prices and simulated data"""
+        is_enabled = self.live_var.get()
+        result = self.engine.toggle_live_data(is_enabled)
+        self.log_message(result)
+
+        if self.engine.use_live_data:
+            self.live_status_label.config(text="Mode: LIVE BTC", foreground="green")
+            self.symbol = "BTCUSDT"  # Update symbol to match
+        else:
+            self.live_status_label.config(text="Mode: Simulated", foreground="gray")
+            if "FAILED" in result:
+                self.live_var.set(False)  # Reset checkbox if failed
 
     def train_ai(self):
         """Train AI model using CSV data + simulated data"""
@@ -1782,8 +1933,14 @@ class TradingBotGUI:
         """Main trading loop with session logging"""
         while self.is_running:
             try:
+                # Get market data source (live or simulated)
+                market_source = self.engine.get_market_data_source()
+
                 # Generate new market tick
-                tick = self.engine.market_simulator.generate_tick()
+                tick = market_source.generate_tick()
+                if tick is None:
+                    time.sleep(1)
+                    continue
                 current_price = tick['close']
 
                 # Log price data for future training
@@ -1794,7 +1951,7 @@ class TradingBotGUI:
                     self.engine.update_positions(self.symbol, current_price)
 
                 # Get historical data for strategy
-                historical_df = self.engine.market_simulator.get_historical_data(periods=200)
+                historical_df = market_source.get_historical_data(periods=200)
 
                 # Get signal from active strategy (Omega Mode or AI)
                 prediction = self.engine.get_signal(historical_df)
