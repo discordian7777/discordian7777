@@ -123,7 +123,7 @@ class DataManager:
         all_data = []
         for csv_file in csv_files:
             try:
-                df = pd.read_csv(csv_file)
+                df = pd.read_csv(csv_file, low_memory=False)
                 # Standardize column names
                 df.columns = df.columns.str.lower().str.strip()
 
@@ -1066,7 +1066,7 @@ class AIStrategyEngine:
         features['price_to_sma50'] = df['close'] / features['sma_50'] - 1
 
         # Drop NaN values
-        features = features.fillna(method='bfill').fillna(0)
+        features = features.bfill().fillna(0)
 
         return features
 
