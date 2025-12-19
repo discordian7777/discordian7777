@@ -1587,12 +1587,30 @@ class TradingEngine:
 # ============================================================================
 
 class TradingBotGUI:
-    """Main GUI application"""
+    """Main GUI application with dark theme"""
+
+    # Dark theme colors
+    COLORS = {
+        'bg_dark': '#0d1117',
+        'bg_panel': '#161b22',
+        'bg_input': '#21262d',
+        'text': '#c9d1d9',
+        'text_dim': '#8b949e',
+        'accent': '#58a6ff',
+        'green': '#3fb950',
+        'red': '#f85149',
+        'orange': '#d29922',
+        'purple': '#a371f7',
+        'border': '#30363d'
+    }
 
     def __init__(self, root):
         self.root = root
-        self.root.title("AI Trading Bot - High Profitability System")
-        self.root.geometry("1400x900")
+        self.root.title("AI Trading Bot - Omega Mode")
+        self.root.geometry("1500x950")
+
+        # Apply dark theme
+        self.apply_dark_theme()
 
         # Trading engine
         self.engine = TradingEngine(initial_balance=10000.0)
@@ -1602,6 +1620,11 @@ class TradingBotGUI:
         self.is_running = False
         self.update_queue = queue.Queue()
 
+        # Trade settings (user configurable)
+        self.trade_size_usd = tk.DoubleVar(value=100.0)
+        self.stop_loss_pct = tk.DoubleVar(value=2.0)
+        self.take_profit_pct = tk.DoubleVar(value=4.0)
+
         # Setup logging
         self.setup_logging()
 
@@ -1610,6 +1633,56 @@ class TradingBotGUI:
 
         # Start GUI update loop
         self.update_gui()
+
+    def apply_dark_theme(self):
+        """Apply dark theme to the application"""
+        style = ttk.Style()
+
+        # Configure dark theme
+        self.root.configure(bg=self.COLORS['bg_dark'])
+
+        style.theme_use('clam')
+
+        # Frame styles
+        style.configure('TFrame', background=self.COLORS['bg_dark'])
+        style.configure('TLabelframe', background=self.COLORS['bg_panel'],
+                       foreground=self.COLORS['text'])
+        style.configure('TLabelframe.Label', background=self.COLORS['bg_panel'],
+                       foreground=self.COLORS['accent'], font=('Arial', 10, 'bold'))
+
+        # Label styles
+        style.configure('TLabel', background=self.COLORS['bg_panel'],
+                       foreground=self.COLORS['text'], font=('Arial', 9))
+        style.configure('Header.TLabel', background=self.COLORS['bg_panel'],
+                       foreground=self.COLORS['accent'], font=('Arial', 11, 'bold'))
+        style.configure('Value.TLabel', background=self.COLORS['bg_panel'],
+                       foreground=self.COLORS['green'], font=('Arial', 10, 'bold'))
+
+        # Button styles
+        style.configure('TButton', background=self.COLORS['bg_input'],
+                       foreground=self.COLORS['text'], font=('Arial', 9, 'bold'),
+                       borderwidth=1)
+        style.map('TButton',
+                 background=[('active', self.COLORS['accent']),
+                           ('pressed', self.COLORS['accent'])],
+                 foreground=[('active', self.COLORS['bg_dark'])])
+
+        style.configure('Start.TButton', background=self.COLORS['green'])
+        style.configure('Stop.TButton', background=self.COLORS['red'])
+
+        # Checkbutton styles
+        style.configure('TCheckbutton', background=self.COLORS['bg_panel'],
+                       foreground=self.COLORS['text'], font=('Arial', 9))
+        style.configure('Omega.TCheckbutton', background=self.COLORS['bg_panel'],
+                       foreground=self.COLORS['purple'], font=('Arial', 9, 'bold'))
+
+        # Entry styles
+        style.configure('TEntry', fieldbackground=self.COLORS['bg_input'],
+                       foreground=self.COLORS['text'], insertcolor=self.COLORS['text'])
+
+        # Spinbox styles
+        style.configure('TSpinbox', fieldbackground=self.COLORS['bg_input'],
+                       foreground=self.COLORS['text'], arrowcolor=self.COLORS['text'])
 
     def setup_logging(self):
         """Setup logging configuration"""
@@ -1704,9 +1777,44 @@ class TradingBotGUI:
         self.live_status_label = ttk.Label(control_frame, text="Mode: Simulated", foreground="gray")
         self.live_status_label.grid(row=1, column=7, padx=5)
 
+        # ===== Left Panel Container =====
+        left_panel = ttk.Frame(main_frame)
+        left_panel.grid(row=1, column=0, rowspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=5)
+
+        # ===== Trade Settings Panel =====
+        settings_frame = ttk.LabelFrame(left_panel, text="⚙ Trade Settings", padding="10")
+        settings_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Trade Size
+        ttk.Label(settings_frame, text="Trade Size (USD):", style='Header.TLabel').grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.trade_size_entry = ttk.Entry(settings_frame, textvariable=self.trade_size_usd, width=12)
+        self.trade_size_entry.grid(row=0, column=1, sticky=tk.W, padx=10, pady=5)
+        ttk.Label(settings_frame, text="$", foreground=self.COLORS['green']).grid(row=0, column=2, sticky=tk.W)
+
+        # Stop Loss
+        ttk.Label(settings_frame, text="Stop Loss (%):", style='Header.TLabel').grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.stop_loss_entry = ttk.Entry(settings_frame, textvariable=self.stop_loss_pct, width=12)
+        self.stop_loss_entry.grid(row=1, column=1, sticky=tk.W, padx=10, pady=5)
+        ttk.Label(settings_frame, text="%", foreground=self.COLORS['red']).grid(row=1, column=2, sticky=tk.W)
+
+        # Take Profit
+        ttk.Label(settings_frame, text="Take Profit (%):", style='Header.TLabel').grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.take_profit_entry = ttk.Entry(settings_frame, textvariable=self.take_profit_pct, width=12)
+        self.take_profit_entry.grid(row=2, column=1, sticky=tk.W, padx=10, pady=5)
+        ttk.Label(settings_frame, text="%", foreground=self.COLORS['green']).grid(row=2, column=2, sticky=tk.W)
+
+        # Apply Settings Button
+        self.apply_settings_btn = ttk.Button(settings_frame, text="Apply Settings", command=self.apply_trade_settings)
+        self.apply_settings_btn.grid(row=3, column=0, columnspan=3, pady=10)
+
+        # Current Settings Display
+        self.settings_status = ttk.Label(settings_frame, text="SL: 2.0% | TP: 4.0% | Size: $100",
+                                         foreground=self.COLORS['text_dim'])
+        self.settings_status.grid(row=4, column=0, columnspan=3, pady=5)
+
         # ===== Statistics Panel =====
-        stats_frame = ttk.LabelFrame(main_frame, text="Statistics", padding="10")
-        stats_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=5)
+        stats_frame = ttk.LabelFrame(left_panel, text="📊 Statistics", padding="10")
+        stats_frame.pack(fill=tk.X, pady=(0, 10))
 
         self.stats_labels = {}
         stats_items = [
@@ -1722,30 +1830,79 @@ class TradingBotGUI:
 
         for i, (label, key) in enumerate(stats_items):
             ttk.Label(stats_frame, text=f"{label}:").grid(row=i, column=0, sticky=tk.W, pady=2)
-            self.stats_labels[key] = ttk.Label(stats_frame, text="$0.00", font=('Arial', 10, 'bold'))
+            self.stats_labels[key] = ttk.Label(stats_frame, text="$0.00", style='Value.TLabel')
             self.stats_labels[key].grid(row=i, column=1, sticky=tk.W, padx=10, pady=2)
 
         # ===== Chart Panel =====
         if PLOTTING_AVAILABLE:
-            chart_frame = ttk.LabelFrame(main_frame, text="Price Chart", padding="10")
+            chart_frame = ttk.LabelFrame(main_frame, text="📈 Price Chart", padding="5")
             chart_frame.grid(row=1, column=1, rowspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=5)
 
-            self.fig = Figure(figsize=(8, 6), dpi=100)
+            # Dark figure with dark background
+            self.fig = Figure(figsize=(10, 7), dpi=100, facecolor=self.COLORS['bg_dark'])
             self.ax1 = self.fig.add_subplot(211)
             self.ax2 = self.fig.add_subplot(212)
 
+            # Apply dark theme to axes
+            for ax in [self.ax1, self.ax2]:
+                ax.set_facecolor(self.COLORS['bg_panel'])
+                ax.tick_params(colors=self.COLORS['text'], labelsize=8)
+                ax.spines['bottom'].set_color(self.COLORS['border'])
+                ax.spines['top'].set_color(self.COLORS['border'])
+                ax.spines['left'].set_color(self.COLORS['border'])
+                ax.spines['right'].set_color(self.COLORS['border'])
+                ax.xaxis.label.set_color(self.COLORS['text'])
+                ax.yaxis.label.set_color(self.COLORS['text'])
+                ax.title.set_color(self.COLORS['text'])
+
             self.canvas = FigureCanvasTkAgg(self.fig, master=chart_frame)
             self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            self.canvas.get_tk_widget().configure(bg=self.COLORS['bg_dark'])
 
         # ===== Log Panel =====
-        log_frame = ttk.LabelFrame(main_frame, text="Trading Log", padding="10")
-        log_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5, padx=5)
+        log_frame = ttk.LabelFrame(left_panel, text="📋 Trading Log", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.log_text = scrolledtext.ScrolledText(log_frame, width=50, height=20, wrap=tk.WORD)
+        self.log_text = scrolledtext.ScrolledText(
+            log_frame, width=45, height=12, wrap=tk.WORD,
+            bg=self.COLORS['bg_input'], fg=self.COLORS['text'],
+            insertbackground=self.COLORS['text'], font=('Consolas', 9)
+        )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
         # Update initial statistics
         self.update_statistics()
+
+    def apply_trade_settings(self):
+        """Apply user trade settings to the engine"""
+        try:
+            trade_size = self.trade_size_usd.get()
+            stop_loss = self.stop_loss_pct.get() / 100.0
+            take_profit = self.take_profit_pct.get() / 100.0
+
+            # Update engine settings
+            self.engine.stop_loss_pct = stop_loss
+            self.engine.take_profit_pct = take_profit
+
+            # Calculate position size as percentage of trade size
+            if self.engine.use_live_data and self.engine.live_market_data.last_price:
+                price = self.engine.live_market_data.last_price
+            else:
+                price = 100.0  # Default for simulation
+
+            # Update max position size based on trade size
+            self.engine.max_position_size = trade_size / self.engine.balance
+
+            # Update status display
+            self.settings_status.config(
+                text=f"SL: {stop_loss*100:.1f}% | TP: {take_profit*100:.1f}% | Size: ${trade_size:.0f}",
+                foreground=self.COLORS['green']
+            )
+            self.log_message(f"Settings applied: Trade ${trade_size:.0f}, SL {stop_loss*100:.1f}%, TP {take_profit*100:.1f}%")
+
+        except Exception as e:
+            self.log_message(f"Error applying settings: {e}")
+            self.settings_status.config(text="Error - check values", foreground=self.COLORS['red'])
 
     def log_message(self, message: str):
         """Add message to log"""
@@ -1797,7 +1954,7 @@ class TradingBotGUI:
             )
 
     def update_chart(self):
-        """Update price chart with live BTC data"""
+        """Update price chart with dark theme, candlesticks and Fibonacci levels"""
         if not PLOTTING_AVAILABLE:
             return
 
@@ -1809,81 +1966,135 @@ class TradingBotGUI:
         self.ax1.clear()
         self.ax2.clear()
 
-        # Use timestamp for X-axis if available, otherwise use index
-        if 'timestamp' in df.columns:
-            x_data = df['timestamp']
-            # Format x-axis for timestamps
-            self.ax1.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
-            self.ax2.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%H:%M'))
+        # Reapply dark theme after clear
+        for ax in [self.ax1, self.ax2]:
+            ax.set_facecolor(self.COLORS['bg_panel'])
+            ax.tick_params(colors=self.COLORS['text'], labelsize=8)
+            for spine in ax.spines.values():
+                spine.set_color(self.COLORS['border'])
+
+        # Use index for X-axis
+        x_data = range(len(df))
+
+        # Calculate Fibonacci levels
+        high_price = df['high'].max() if 'high' in df.columns else df['close'].max()
+        low_price = df['low'].min() if 'low' in df.columns else df['close'].min()
+        price_range = high_price - low_price
+
+        fib_levels = {
+            '0%': high_price,
+            '23.6%': high_price - 0.236 * price_range,
+            '38.2%': high_price - 0.382 * price_range,
+            '50%': high_price - 0.5 * price_range,
+            '61.8%': high_price - 0.618 * price_range,
+            '100%': low_price
+        }
+
+        # Draw Fibonacci levels
+        fib_colors = {'0%': '#3fb950', '23.6%': '#58a6ff', '38.2%': '#58a6ff',
+                     '50%': '#d29922', '61.8%': '#d29922', '100%': '#f85149'}
+        for level, price in fib_levels.items():
+            self.ax1.axhline(y=price, color=fib_colors[level], linestyle='--',
+                           linewidth=0.8, alpha=0.6)
+            self.ax1.annotate(f'Fib {level}', xy=(len(df)-1, price),
+                            fontsize=7, color=fib_colors[level], alpha=0.8)
+
+        # Draw candlesticks
+        if all(col in df.columns for col in ['open', 'high', 'low', 'close']):
+            for i in range(len(df)):
+                open_price = df['open'].iloc[i]
+                close_price = df['close'].iloc[i]
+                high_price_i = df['high'].iloc[i]
+                low_price_i = df['low'].iloc[i]
+
+                # Determine color
+                if close_price >= open_price:
+                    color = self.COLORS['green']  # Bullish
+                else:
+                    color = self.COLORS['red']  # Bearish
+
+                # Draw wick (high-low line)
+                self.ax1.plot([i, i], [low_price_i, high_price_i], color=color, linewidth=0.8)
+
+                # Draw body
+                body_bottom = min(open_price, close_price)
+                body_height = abs(close_price - open_price)
+                rect = plt.Rectangle((i - 0.3, body_bottom), 0.6, body_height,
+                                     facecolor=color, edgecolor=color, alpha=0.9)
+                self.ax1.add_patch(rect)
         else:
-            x_data = df.index
+            # Fallback to line chart
+            self.ax1.plot(x_data, df['close'], color=self.COLORS['accent'], linewidth=1.5)
 
-        # Price chart - candlestick style for live data
-        if self.engine.use_live_data and all(col in df.columns for col in ['open', 'high', 'low', 'close']):
-            # Plot as line with high/low range
-            self.ax1.fill_between(x_data, df['low'], df['high'], alpha=0.2, color='blue', label='H/L Range')
-            self.ax1.plot(x_data, df['close'], label='Close', color='blue', linewidth=1.5)
-            self.ax1.plot(x_data, df['open'], label='Open', color='gray', linewidth=0.8, linestyle='--', alpha=0.7)
-        else:
-            self.ax1.plot(x_data, df['close'], label='Price', color='blue', linewidth=1.5)
+        # Current price line and annotation
+        if len(df) > 0:
+            current_price = df['close'].iloc[-1]
+            prev_price = df['close'].iloc[0]
+            price_change = current_price - prev_price
+            pct_change = (price_change / prev_price) * 100 if prev_price > 0 else 0
 
-        # Add moving averages
-        if len(df) >= 20:
-            sma20 = TechnicalIndicators.calculate_sma(df['close'], 20)
-            self.ax1.plot(x_data, sma20, label='SMA 20', color='orange', linewidth=1, alpha=0.7)
+            # Current price horizontal line
+            self.ax1.axhline(y=current_price, color=self.COLORS['accent'],
+                           linestyle='-', linewidth=1, alpha=0.8)
 
-        if len(df) >= 50:
-            sma50 = TechnicalIndicators.calculate_sma(df['close'], 50)
-            self.ax1.plot(x_data, sma50, label='SMA 50', color='red', linewidth=1, alpha=0.7)
+            # Price annotation box
+            price_color = self.COLORS['green'] if pct_change >= 0 else self.COLORS['red']
+            self.ax1.annotate(f'${current_price:,.2f}',
+                            xy=(len(df)-1, current_price),
+                            xytext=(10, 0), textcoords='offset points',
+                            fontsize=10, fontweight='bold', color=self.COLORS['bg_dark'],
+                            bbox=dict(boxstyle='round,pad=0.3', facecolor=self.COLORS['accent'],
+                                    edgecolor='none', alpha=0.9))
 
-        # Mark trades
-        for trade in self.engine.trades[-20:]:  # Last 20 trades
+            # Trend indicator
+            trend_text = "↑ UPTREND" if pct_change > 0.5 else ("↓ DOWNTREND" if pct_change < -0.5 else "→ SIDEWAYS")
+            trend_color = self.COLORS['green'] if pct_change > 0 else self.COLORS['red']
+            self.ax1.annotate(trend_text, xy=(0.02, 0.95), xycoords='axes fraction',
+                            fontsize=9, fontweight='bold', color=self.COLORS['bg_dark'],
+                            bbox=dict(boxstyle='round,pad=0.3', facecolor=trend_color, alpha=0.9))
+
+            # Price change indicator (top right)
+            change_sign = "▲" if pct_change >= 0 else "▼"
+            self.ax1.annotate(f'{change_sign} {abs(price_change):.2f} ({pct_change:.2f}%)',
+                            xy=(0.98, 0.95), xycoords='axes fraction',
+                            fontsize=9, fontweight='bold', color=price_color,
+                            ha='right')
+
+        # Mark trades on chart
+        for trade in self.engine.trades[-20:]:
             try:
-                idx = df[df['timestamp'] >= trade.timestamp].index[0]
-                trade_x = x_data.iloc[idx] if 'timestamp' in df.columns else idx
-                color = 'green' if trade.side == 'BUY' else 'red'
+                idx = df[df['timestamp'] >= trade.timestamp].index[0] if 'timestamp' in df.columns else 0
+                color = self.COLORS['green'] if trade.side == 'BUY' else self.COLORS['red']
                 marker = '^' if trade.side == 'BUY' else 'v'
-                self.ax1.scatter(trade_x, trade.price, color=color, marker=marker, s=100, zorder=5)
+                self.ax1.scatter(idx, trade.price, color=color, marker=marker,
+                               s=120, zorder=5, edgecolors='white', linewidths=1)
             except (IndexError, KeyError):
                 pass
 
-        # Current price annotation for live mode
-        if self.engine.use_live_data and len(df) > 0:
-            current_price = df['close'].iloc[-1]
-            self.ax1.axhline(y=current_price, color='green', linestyle='-', linewidth=0.8, alpha=0.5)
-            self.ax1.annotate(f'${current_price:,.2f}', xy=(x_data.iloc[-1], current_price),
-                            xytext=(5, 0), textcoords='offset points', fontsize=9,
-                            color='green', fontweight='bold')
+        # Chart title
+        mode_str = "● LIVE" if self.engine.use_live_data else "○ SIM"
+        self.ax1.set_title(f'{mode_str}  |  BTC/USD  |  Candlesticks  |  Fibonacci Analysis',
+                         fontsize=11, fontweight='bold', color=self.COLORS['text'], loc='left')
 
-        self.ax1.set_ylabel('Price (USD)')
-        self.ax1.legend(loc='upper left', fontsize=8)
-        self.ax1.grid(True, alpha=0.3)
-
-        # Title with live indicator
-        mode_str = "LIVE" if self.engine.use_live_data else "SIM"
-        current_price_str = f" | ${df['close'].iloc[-1]:,.2f}" if len(df) > 0 else ""
-        self.ax1.set_title(f'{self.symbol} [{mode_str}]{current_price_str}', fontsize=10, fontweight='bold')
-
-        # Format Y-axis for large BTC prices
+        self.ax1.set_ylabel('Price (USD)', color=self.COLORS['text'])
         self.ax1.yaxis.set_major_formatter(plt.matplotlib.ticker.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+        self.ax1.grid(True, alpha=0.15, color=self.COLORS['border'])
 
-        # Volume chart with colors based on price movement
+        # Volume chart with colored bars
         if 'volume' in df.columns:
             colors = []
             for i in range(len(df)):
                 if i == 0:
-                    colors.append('gray')
+                    colors.append(self.COLORS['text_dim'])
                 elif df['close'].iloc[i] >= df['close'].iloc[i-1]:
-                    colors.append('green')
+                    colors.append(self.COLORS['green'])
                 else:
-                    colors.append('red')
+                    colors.append(self.COLORS['red'])
 
-            self.ax2.bar(x_data, df['volume'], color=colors, alpha=0.6)
-            self.ax2.set_ylabel('Volume')
-            self.ax2.set_xlabel('Time')
-            self.ax2.grid(True, alpha=0.3)
-
-            # Format volume for readability
+            self.ax2.bar(x_data, df['volume'], color=colors, alpha=0.7, width=0.8)
+            self.ax2.set_ylabel('Volume', color=self.COLORS['text'])
+            self.ax2.set_xlabel('Time', color=self.COLORS['text'])
+            self.ax2.grid(True, alpha=0.15, color=self.COLORS['border'])
             self.ax2.yaxis.set_major_formatter(plt.matplotlib.ticker.FuncFormatter(
                 lambda x, p: f'{x/1000:.0f}K' if x < 1000000 else f'{x/1000000:.1f}M'))
 
