@@ -770,7 +770,7 @@ class ClaudeProvider(AIProvider):
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.environ.get('ANTHROPIC_API_KEY', '')
         self.base_url = "https://api.anthropic.com/v1/messages"
-        self.model = "claude-3-5-sonnet-latest"
+        self.model = "claude-3-5-sonnet-20241022"
 
     def get_name(self) -> str:
         return "Claude"
