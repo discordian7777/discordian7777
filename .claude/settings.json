@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "bash .claude/scripts/session-start.sh"
+      }
+    ]
+  },
+  "allowedTools": [
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep"
+  ],
+  "project": {
+    "name": "AI Trading Bot",
+    "description": "AI-powered cryptocurrency trading bot with multi-strategy ensemble system"
+  }
+}
