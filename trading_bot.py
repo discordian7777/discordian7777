@@ -1222,35 +1222,51 @@ class MarketDataSimulator:
 
 
 class LiveMarketData:
-    """Fetches live BTC price data from Binance US API"""
+    """Fetches live BTC price data from CoinGecko API"""
 
     def __init__(self, symbol: str = "BTCUSD"):
         self.symbol = symbol
-        self.base_url = "https://api.binance.us/api/v3"
+        self.coin_id = "bitcoin"
+        self.base_url = "https://api.coingecko.com/api/v3"
         self.history = []
         self.last_price = None
+        self.last_volume = 0
+        self.cached_history = None
+        self.cache_time = None
 
     def fetch_current_price(self) -> Dict:
-        """Fetch current BTC price from Binance"""
+        """Fetch current BTC price from CoinGecko"""
         try:
+            # Get current price with market data
             response = requests.get(
-                f"{self.base_url}/ticker/24hr",
-                params={"symbol": self.symbol},
+                f"{self.base_url}/simple/price",
+                params={
+                    "ids": self.coin_id,
+                    "vs_currencies": "usd",
+                    "include_24hr_vol": "true",
+                    "include_24hr_change": "true"
+                },
                 timeout=10
             )
             response.raise_for_status()
             data = response.json()
 
+            current_price = float(data['bitcoin']['usd'])
+            volume_24h = float(data['bitcoin'].get('usd_24hr_vol', 0))
+
+            # Calculate OHLC from price movement
+            price_change = current_price * 0.001  # Estimate small range
             tick = {
                 'timestamp': datetime.datetime.now(),
-                'open': float(data['openPrice']),
-                'high': float(data['highPrice']),
-                'low': float(data['lowPrice']),
-                'close': float(data['lastPrice']),
-                'volume': float(data['volume'])
+                'open': current_price - price_change,
+                'high': current_price + price_change,
+                'low': current_price - price_change,
+                'close': current_price,
+                'volume': volume_24h / 1440  # Approximate per-minute volume
             }
 
-            self.last_price = tick['close']
+            self.last_price = current_price
+            self.last_volume = volume_24h
             self.history.append(tick)
 
             # Keep last 1000 ticks
@@ -1261,7 +1277,6 @@ class LiveMarketData:
 
         except Exception as e:
             logging.error(f"Error fetching live price: {e}")
-            # Return last known price or default
             if self.last_price:
                 return {
                     'timestamp': datetime.datetime.now(),
@@ -1273,43 +1288,64 @@ class LiveMarketData:
                 }
             return None
 
-    def fetch_klines(self, interval: str = "1m", limit: int = 200) -> pd.DataFrame:
-        """Fetch historical klines/candlestick data from Binance"""
+    def fetch_historical(self, days: int = 1) -> pd.DataFrame:
+        """Fetch historical price data from CoinGecko"""
         try:
+            # Cache for 1 minute to avoid rate limits
+            now = datetime.datetime.now()
+            if self.cached_history is not None and self.cache_time:
+                if (now - self.cache_time).seconds < 60:
+                    return self.cached_history
+
             response = requests.get(
-                f"{self.base_url}/klines",
+                f"{self.base_url}/coins/{self.coin_id}/market_chart",
                 params={
-                    "symbol": self.symbol,
-                    "interval": interval,
-                    "limit": limit
+                    "vs_currency": "usd",
+                    "days": days,
+                    "interval": "daily" if days > 1 else ""
                 },
-                timeout=10
+                timeout=15
             )
             response.raise_for_status()
             data = response.json()
 
-            # Binance kline format: [open_time, open, high, low, close, volume, close_time, ...]
-            df = pd.DataFrame(data, columns=[
-                'open_time', 'open', 'high', 'low', 'close', 'volume',
-                'close_time', 'quote_volume', 'trades', 'taker_buy_base',
-                'taker_buy_quote', 'ignore'
-            ])
+            prices = data.get('prices', [])
+            volumes = data.get('total_volumes', [])
 
-            # Convert to proper types
-            df['timestamp'] = pd.to_datetime(df['open_time'], unit='ms')
-            df['open'] = df['open'].astype(float)
-            df['high'] = df['high'].astype(float)
-            df['low'] = df['low'].astype(float)
-            df['close'] = df['close'].astype(float)
-            df['volume'] = df['volume'].astype(float)
+            if not prices:
+                return pd.DataFrame()
 
-            # Update history with latest
-            self.last_price = df['close'].iloc[-1]
+            # Build DataFrame
+            df_data = []
+            for i, (ts, price) in enumerate(prices):
+                vol = volumes[i][1] if i < len(volumes) else 0
+                timestamp = datetime.datetime.fromtimestamp(ts / 1000)
 
-            return df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+                # Estimate OHLC from price points
+                prev_price = prices[i-1][1] if i > 0 else price
+                high = max(price, prev_price)
+                low = min(price, prev_price)
+
+                df_data.append({
+                    'timestamp': timestamp,
+                    'open': prev_price,
+                    'high': high,
+                    'low': low,
+                    'close': price,
+                    'volume': vol / 1440 if days <= 1 else vol  # Per-minute for intraday
+                })
+
+            df = pd.DataFrame(df_data)
+            self.last_price = df['close'].iloc[-1] if len(df) > 0 else self.last_price
+
+            # Cache result
+            self.cached_history = df
+            self.cache_time = now
+
+            return df
 
         except Exception as e:
-            logging.error(f"Error fetching klines: {e}")
+            logging.error(f"Error fetching historical data: {e}")
             return pd.DataFrame()
 
     def generate_tick(self) -> Dict:
@@ -1318,7 +1354,7 @@ class LiveMarketData:
 
     def get_historical_data(self, periods: int = 200) -> pd.DataFrame:
         """Get historical data (compatible with simulator interface)"""
-        df = self.fetch_klines(interval="1m", limit=periods)
+        df = self.fetch_historical(days=1)
         if df.empty and self.history:
             return pd.DataFrame(self.history[-periods:])
         return df
